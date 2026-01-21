@@ -94,9 +94,24 @@ def carregar_arquivo(uploaded_file):
             return pd.read_csv(uploaded_file, encoding='utf-8')
         except:
             uploaded_file.seek(0)
-            return pd.read_csv(uploaded_file, sep=';', encoding='latin1')
+            try:
+                return pd.read_csv(uploaded_file, sep=';', encoding='latin1')
+            except:
+                uploaded_file.seek(0)
+                return pd.read_csv(uploaded_file, sep=',', encoding='latin1')
     else:
         return pd.read_excel(uploaded_file)
+
+def encontrar_coluna(df, palavras_chave):
+    colunas_reais = df.columns
+    for chave in palavras_chave:
+        if chave in colunas_reais:
+            return chave
+    for chave in palavras_chave:
+        for col_real in colunas_reais:
+            if chave.upper() == col_real.upper().strip():
+                return col_real
+    return None
 
 def carregar_base_tratativas(file_base):
     if file_base is None: return set()
@@ -109,93 +124,78 @@ def carregar_base_tratativas(file_base):
     except:
         return set()
 
-def encontrar_coluna(df, palavras_chave):
-    """
-    Procura uma coluna no DataFrame baseada em palavras-chave (case insensitive).
-    Retorna o nome real da coluna se encontrar, ou None.
-    """
-    colunas_reais = df.columns
-    # Primeiro tenta match exato
-    for chave in palavras_chave:
-        if chave in colunas_reais:
-            return chave
-            
-    # Depois tenta match insensível a maiúsculas/espaços
-    for chave in palavras_chave:
-        for col_real in colunas_reais:
-            if chave.upper().replace(" ", "") == col_real.strip().upper().replace(" ", ""):
-                return col_real
-    return None
-
 def tratar_sysemp(df):
     st.info("Processando Sysemp...", icon="⚙️")
     
-    # 1. Identifica ID da Empresa
-    coluna_id = encontrar_coluna(df, ['Empresa', 'Empresa.1', 'Cód. Empresa'])
-    if not coluna_id:
-        st.error("❌ ERRO NO SYSEMP: Não encontrei a coluna de 'Empresa'.")
+    # === BUSCA INTELIGENTE DA COLUNA DE EMPRESA ===
+    # Procura TODAS as colunas que parecem "Empresa"
+    candidatas = [c for c in df.columns if 'EMPRESA' in c.upper()]
+    
+    coluna_id_final = None
+    
+    # Testa uma por uma: qual delas tem os números 16, 18, 19 ou 21?
+    for col in candidatas:
+        # Converte para número (se for texto, vira NaN)
+        temp_series = pd.to_numeric(df[col], errors='coerce')
+        # Verifica se existe algum dos nossos IDs alvo nesta coluna
+        matches = temp_series.isin([16, 18, 19, 21]).sum()
+        
+        if matches > 0:
+            coluna_id_final = col
+            # st.success(f"Coluna de ID identificada automaticamente: {col}") # Debug visual
+            break
+            
+    if not coluna_id_final:
+        st.error("❌ ERRO CRÍTICO: Não encontrei nenhuma coluna com os códigos das empresas (16, 18, 19, 21).")
+        st.write("Colunas analisadas:", candidatas)
         return pd.DataFrame()
 
-    # Filtro de Empresa
-    df['temp_id'] = pd.to_numeric(df[coluna_id], errors='coerce')
+    # Filtro usando a coluna vencedora
+    df['temp_id'] = pd.to_numeric(df[coluna_id_final], errors='coerce')
     df_filtrado = df[df['temp_id'].isin([16, 18, 19, 21])].copy()
     
     if df_filtrado.empty:
-        st.error(f"❌ ERRO NO FILTRO: Nenhuma linha sobrou após filtrar empresas.")
-        return pd.DataFrame()
-
-    df = df_filtrado
+        st.error("❌ O filtro retornou vazio mesmo após identificar a coluna. Verifique o arquivo.")
+        st.stop()
+    else:
+        df = df_filtrado
 
     # 2. Busca Nota Fiscal
     col_nf = encontrar_coluna(df, ['Nota Fiscal', 'NF', 'Numero NF'])
     if not col_nf:
-        st.error("❌ ERRO NO SYSEMP: Não encontrei a coluna 'Nota Fiscal'.")
+        st.error("❌ ERRO NO SYSEMP: Coluna 'Nota Fiscal' não encontrada.")
         return pd.DataFrame()
     
     df['Nota Fiscal'] = df[col_nf].apply(normalizar_nf)
 
-    # 3. Busca Chave e Pedido (LÓGICA BLINDADA)
-    
-    # Chave
+    # 3. Busca Chave e Pedido
     col_chave = encontrar_coluna(df, ['Chave NFe', 'Chave NF', 'Chave'])
     
-    # --- NOVA LÓGICA DE PEDIDO (Igual à anterior, que funcionou para selecionar a coluna) ---
     col_pedido_final = None
-    
-    # Passo 1: Varre todas as colunas procurando "PEDIDO" E "MARKETPLACE" no nome
-    for col in df.columns:
-        nome_col = col.upper().strip()
-        if "PEDIDO" in nome_col and "MARKETPLACE" in nome_col:
-            col_pedido_final = col
-            break 
-            
-    # Passo 2: Se não achou a 'Top', tenta achar 'PEDIDO MKT'
-    if not col_pedido_final:
-        col_pedido_final = encontrar_coluna(df, ['Pedido Mkt', 'Ped Marketplace'])
-        
-    # Passo 3: Se não achou NADA, só aí pega 'Pedido' comum
-    if not col_pedido_final:
-        col_pedido_final = encontrar_coluna(df, ['Pedido', 'Ped.'])
+    if 'Pedido Marketplace' in df.columns:
+        col_pedido_final = 'Pedido Marketplace'
+    else:
+        for col in df.columns:
+            if "PEDIDO" in col.upper() and "MARKETPLACE" in col.upper():
+                col_pedido_final = col
+                break
+        if not col_pedido_final:
+             col_pedido_final = encontrar_coluna(df, ['Pedido'])
 
-    # DEBUG
-    with st.expander("🕵️‍♂️ DEBUG COLUNAS SYSEMP"):
-        st.write(f"Coluna de Pedido Identificada no Sysemp: **{col_pedido_final}**")
-        if col_pedido_final:
-            st.dataframe(df[[col_pedido_final]].head(3))
-
-    # Montagem do DF Limpo
     df_novo = pd.DataFrame()
     df_novo['Nota Fiscal'] = df['Nota Fiscal']
 
+    # Preenche Chave
     if col_chave:
-        df_novo['Chave NF'] = df[col_chave].astype(str).str.replace('.0', '', regex=False).str.replace('nan', '', case=False).str.strip()
+        df_novo['Chave NF_sys'] = df[col_chave].astype(str).str.replace('.0', '', regex=False).str.replace('nan', '', case=False).str.strip()
     else:
-        df_novo['Chave NF'] = "N/A"
+        df_novo['Chave NF_sys'] = "N/A"
 
+    # Preenche Pedido
     if col_pedido_final:
-        df_novo['Pedido'] = df[col_pedido_final].astype(str).str.replace('.0', '', regex=False).str.replace('nan', '', case=False).str.strip()
+        df_novo['Pedido_sys'] = df[col_pedido_final].astype(str).str.replace('.0', '', regex=False).str.replace('nan', '', case=False).str.strip()
     else:
-        df_novo['Pedido'] = "N/A"
+        df_novo['Pedido_sys'] = "N/A"
 
     return df_novo
 
@@ -209,15 +209,16 @@ def tratar_intelipost(df):
     if col_mkt: df = df.rename(columns={col_mkt: 'Marketplace'})
     if col_micro: df = df.rename(columns={col_micro: 'Ocorrência de Entrega'})
     
-    if not col_nf and 'Nota Fiscal' not in df.columns:
-        st.error("Erro Intelipost: Coluna Nota Fiscal não encontrada.")
-        return pd.DataFrame()
-    
     if col_nf and col_nf != 'Nota Fiscal':
         df = df.rename(columns={col_nf: 'Nota Fiscal'})
+    
+    if 'Nota Fiscal' not in df.columns:
+        st.error("Erro Intelipost: Coluna Nota Fiscal não encontrada.")
+        return pd.DataFrame()
 
     df['Nota Fiscal'] = df['Nota Fiscal'].apply(normalizar_nf)
     
+    # Filtro de Status
     if 'Ocorrência de Entrega' in df.columns:
         df['Ocorrência de Entrega'] = df['Ocorrência de Entrega'].astype(str).str.upper()
         df = df[~df['Ocorrência de Entrega'].str.contains("ATRASO|INFORMATIVO", na=False)]
@@ -254,37 +255,28 @@ if file_intelipost and file_sysemp:
             if file_base:
                 nfs_bloqueadas = carregar_base_tratativas(file_base)
 
-            # 2. Tratamento Individual
+            # 2. Tratamento
             df_inteli = tratar_intelipost(df_inteli_raw)
             df_sysemp = tratar_sysemp(df_sysemp_raw)
 
-            if df_inteli.empty or df_sysemp.empty:
-                st.warning("Processamento interrompido. Verifique erros acima.")
+            if df_inteli.empty:
+                st.warning("Intelipost vazio após filtros.")
                 st.stop()
 
-            # 3. Merge (Cruzamento) - AQUI ESTAVA O ERRO DE SELEÇÃO
-            # Usamos sufixos explicítos para saber quem é quem
-            df_merged = pd.merge(df_inteli, df_sysemp, on='Nota Fiscal', how='left', suffixes=('_inteli', '_sys'))
+            # 3. Merge
+            df_merged = pd.merge(df_inteli, df_sysemp, on='Nota Fiscal', how='left')
 
-            # 4. Regras de Negócio
-            
-            # --- CORREÇÃO DO PEDIDO ---
-            # Se existir 'Pedido_sys' (vindo do Sysemp), ele é o rei. Sobrescreve tudo.
+            # 4. Regras
             if 'Pedido_sys' in df_merged.columns:
                 df_merged['Pedido'] = df_merged['Pedido_sys'].fillna("N/A")
-            elif 'Pedido' in df_merged.columns:
-                # Se só tiver o da Intelipost, usa ele (mas provavelmente não é o que queremos)
-                pass 
-            else:
+            elif 'Pedido' not in df_merged.columns:
                 df_merged['Pedido'] = "N/A"
-
-            # --- CORREÇÃO DA CHAVE NF ---
+            
             if 'Chave NF_sys' in df_merged.columns:
                 df_merged['Chave NF'] = df_merged['Chave NF_sys'].fillna("N/A")
             elif 'Chave NF' not in df_merged.columns:
                  df_merged['Chave NF'] = "N/A"
 
-            # Marketplace
             dict_mkt_norm = {k.upper(): v for k, v in DICIONARIO_MARKETPLACE.items()}
             def corrigir_mkt(val):
                 if pd.isna(val): return "VERIFICAR"
@@ -305,10 +297,13 @@ if file_intelipost and file_sysemp:
 
             df_merged['Data Tratativa'] = datetime.now().strftime('%d/%m/%Y')
 
-            # 5. Filtro de Exclusão e Exportação
+            # 5. Filtro de Histórico
             total_inicial = len(df_merged)
             mask_exclusao = df_merged['Nota Fiscal'].isin(nfs_bloqueadas)
+            
             df_final_filtrado = df_merged[~mask_exclusao].copy()
+            df_removidas = df_merged[mask_exclusao].copy()
+            
             total_excluido = mask_exclusao.sum()
             total_final = len(df_final_filtrado)
 
@@ -319,34 +314,33 @@ if file_intelipost and file_sysemp:
             
             for c in colunas_desejadas:
                 if c not in df_final_filtrado.columns: df_final_filtrado[c] = ""
+                if c not in df_removidas.columns: df_removidas[c] = ""
             
             df_export = df_final_filtrado[colunas_desejadas].rename(columns={'Marketplace Final': 'Marketplace'})
+            df_export_removidas = df_removidas[colunas_desejadas].rename(columns={'Marketplace Final': 'Marketplace'})
 
             st.success("✅ Processamento Concluído!")
             
             m1, m2, m3 = st.columns(3)
             m1.metric("Pendências Totais", total_inicial)
-            m2.metric("Já em Tratativa", int(total_excluido), delta=-int(total_excluido), delta_color="inverse")
-            m3.metric("Novas para Tratar", total_final, delta=int(total_final))
+            m2.metric("Removidas (Histórico)", int(total_excluido), delta=-int(total_excluido), delta_color="inverse")
+            m3.metric("Novas para Tratar", total_final)
 
-            if total_final > 0:
-                st.subheader("Visualização")
-                st.dataframe(df_export.head())
+            st.subheader("Novas Pendências (Aba 1)")
+            st.dataframe(df_export.head())
 
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df_export.to_excel(writer, index=False, sheet_name='Tratativas')
-                
-                st.download_button(
-                    label="📥 Baixar Planilha Final",
-                    data=buffer.getvalue(),
-                    file_name=f"Tratativas_{datetime.now().strftime('%d-%m')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary"
-                )
-            else:
-                st.balloons()
-                st.info("Nada pendente!")
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_export.to_excel(writer, index=False, sheet_name='Tratativas (Novas)')
+                df_export_removidas.to_excel(writer, index=False, sheet_name='Removidas (No Histórico)')
+            
+            st.download_button(
+                label="📥 BAIXAR PLANILHA COMPLETA",
+                data=buffer.getvalue(),
+                file_name=f"Tratativas_Full_{datetime.now().strftime('%d-%m')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
 
         except Exception as e:
             st.error("🚨 ERRO CRÍTICO NO SISTEMA")
