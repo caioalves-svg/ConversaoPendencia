@@ -42,14 +42,14 @@ DICIONARIO_MARKETPLACE = {
     "MERCADO LIVRE - EXTREMA": "MERCADO LIVRE - EXTREMA", "shopee": "SHOPEE",
     "WEBCONTINENTAL": "WEBCONTINENTAL", "WAPSTORE - ENGAGE": "WAPSTORE - ENGAGE",
     "LEROY - EXTREMA": "LEROY - EXTREMA", "BRADESCO SHOP": "BRADESCO SHOP",
-    "TIKTOK": "TIKTOK", "AMAZON DBA": "AMAZON DBA", "Via Pajucara": "PAJUÇARA"
+    "TIKTOK": "TIKTOK", "AMAZON DBA": "AMAZON DBA", "ZEMA": "ZEMA"
 }
 
 DICIONARIO_TRANSPORTADORA = {
     "Atual Cargas": "ATUAL", "Brasil Web Standard": "BRASIL WEB", "Favorita Transportes": "FAVORITA",
     "FrontLog": "FRONTLOG", "Generoso": "GENEROSO", "JadLog": "JADLOG", "Logan Express": "LOGAN",
     "MMA Cargas Expressas": "MMA", "Patrus": "PATRUS", "Reboucas": "REBOUÇAS", "Rede Sul": "REDE SUL",
-    "Rio Express Cargas": "RIO EXPRESS", "TJB": "TJB", "Total": "TOTAL", "Trilog Express": "TRILOG"
+    "Rio Express Cargas": "RIO EXPRESS", "TJB": "TJB", "Total": "TOTAL", "Trilog Express": "TRILOG", "Via Pajuçara": "PAJUÇARA"
 }
 
 DICIONARIO_OCORRENCIA = {
