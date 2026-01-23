@@ -48,7 +48,7 @@ DICIONARIO_MARKETPLACE = {
 DICIONARIO_TRANSPORTADORA = {
     "Atual Cargas": "ATUAL", "Brasil Web Standard": "BRASIL WEB", "Favorita Transportes": "FAVORITA",
     "FrontLog": "FRONTLOG", "Generoso": "GENEROSO", "JadLog": "JADLOG", "Logan Express": "LOGAN",
-    "MMA Cargas Expressas": "MMA", "Patrus": "PATRUS", "Reboucas": "REBOUÇAS", "Rede Sul": "REDE SUL",
+    "MMA Cargas Expressas": "MMA", "Patrus": "PATRUS", "Reboucas ": "REBOUÇAS", "Rede Sul": "REDE SUL",
     "Rio Express Cargas": "RIO EXPRESS", "TJB": "TJB", "Total": "TOTAL", "Trilog Express": "TRILOG", "Via Pajucara": "PAJUÇARA"
 }
 
