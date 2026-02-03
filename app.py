@@ -84,8 +84,10 @@ def normalizar_nf(valor):
     if pd.isna(valor): return ""
     s = str(valor).strip()
     if s.lower() == 'nan': return ""
-    if s.endswith('.0'): s = s.replace('.0', '')
-    if ',' in s: s = s.split(',')[0]
+    # Remove .0 se existir
+    if s.endswith('.0'): s = s[:-2]
+    # Remove pontuações
+    s = s.replace('.', '').replace(',', '')
     return s
 
 def carregar_arquivo(uploaded_file):
@@ -118,10 +120,27 @@ def carregar_base_tratativas(file_base):
     try:
         df_base = carregar_arquivo(file_base)
         col_nf_base = encontrar_coluna(df_base, ['Nota Fiscal', 'NF', 'Numero NF'])
+        
+        # Caso 1: Encontrou o cabeçalho padrão
         if col_nf_base:
             return set(df_base[col_nf_base].apply(normalizar_nf))
+        
+        # Caso 2: Não encontrou cabeçalho, assume que é a primeira coluna
+        # E que a primeira linha já é um dado (o arquivo perdeu o título)
+        if len(df_base.columns) > 0:
+            col_0 = df_base.columns[0]
+            # st.warning(f"⚠️ Histórico sem cabeçalho identificado. Usando a primeira coluna: {col_0}")
+            
+            # Pega todos os valores da coluna
+            valores = set(df_base[col_0].apply(normalizar_nf))
+            # Adiciona TAMBÉM o nome da coluna, pois ele é a primeira NF que virou cabeçalho errado
+            valores.add(normalizar_nf(col_0))
+            
+            return valores
+            
         return set()
-    except:
+    except Exception as e:
+        # st.error(f"Erro ao ler histórico: {e}")
         return set()
 
 def tratar_sysemp(df):
@@ -299,7 +318,11 @@ if file_intelipost and file_sysemp:
 
             # 5. Filtro de Histórico
             total_inicial = len(df_merged)
-            mask_exclusao = df_merged['Nota Fiscal'].isin(nfs_bloqueadas)
+            
+            # Garante que a coluna de NF está como string limpa para comparar com o set
+            df_merged['Nota Fiscal Clean'] = df_merged['Nota Fiscal'].apply(normalizar_nf)
+            
+            mask_exclusao = df_merged['Nota Fiscal Clean'].isin(nfs_bloqueadas)
             
             df_final_filtrado = df_merged[~mask_exclusao].copy()
             df_removidas = df_merged[mask_exclusao].copy()
