@@ -4,7 +4,7 @@ from datetime import datetime
 
 # Importações da Nova Estrutura
 from ui.styles import apply_global_styles
-from ui.components import render_header, render_metric_card, render_results_tabs
+from ui.components import render_header, render_metric_card, render_results_tabs, render_instructions
 from core.processor import DataProcessor
 from utils.helpers import carregar_arquivo
 
@@ -44,6 +44,7 @@ def main():
     # 4. Seleção de Fluxo
     if "Intelipost" in menu:
         render_header("Pendência - Intelipost", "Automação avançada para cruzamento de transações logísticas.")
+        render_instructions("intelipost")
         
         with st.container():
             c1, c2, c3 = st.columns(3)
@@ -65,6 +66,7 @@ def main():
 
     else:
         render_header("Pendência - E-mail", "Fluxo ágil para tratativas recebidas via comunicação direta.")
+        render_instructions("email")
         
         st.info("💡 Certifique-se que o arquivo de e-mail contém: **Nota Fiscal, Transportadora e Ocorrência**.")
         

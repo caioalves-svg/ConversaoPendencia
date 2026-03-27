@@ -8,6 +8,35 @@ def render_header(title, subtitle):
     st.markdown(f'<h1 class="main-title">{title}</h1>', unsafe_allow_html=True)
     st.markdown(f'<p class="sub-title">{subtitle}</p>', unsafe_allow_html=True)
 
+def render_instructions(tipo="intelipost"):
+    """Renderiza o guia passo a passo visual."""
+    if tipo == "intelipost":
+        steps = [
+            {"icon": "📥", "title": "Extração Intelipost", "desc": "Exporte as transações do portal Intelipost (CSV ou XLSX)."},
+            {"icon": "🖥️", "title": "Base Sysemp", "desc": "Gere o relatório de 'Manutenção de Notas Fiscais' no Sysemp."},
+            {"icon": "🔍", "title": "Histórico (Opcional)", "desc": "Use uma planilha anterior para ignorar NFs já tratadas."},
+            {"icon": "🚀", "title": "Processamento", "desc": "Clique no botão de processar e baixe o arquivo final."}
+        ]
+    else:
+        steps = [
+            {"icon": "📧", "title": "Dados de E-mail", "desc": "Prepare a planilha com: Nota Fiscal, Transportadora e Ocorrência."},
+            {"icon": "🖥️", "title": "Base Sysemp", "desc": "Gere o relatório de 'Manutenção de Notas Fiscais' no Sysemp."},
+            {"icon": "🛡️", "title": "Evite Duplicidade", "desc": "Suba o histórico para filtrar registros repetidos."},
+            {"icon": "📊", "title": "Resultado", "desc": "Processe e obtenha a planilha formatada para tratativa."}
+        ]
+
+    cols = st.columns(len(steps))
+    for i, step in enumerate(steps):
+        with cols[i]:
+            st.markdown(f"""
+            <div style="background: white; padding: 20px; border-radius: 15px; border: 1px solid #e2e8f0; text-align: center; height: 180px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div style="font-size: 2rem; margin-bottom: 10px;">{step['icon']}</div>
+                <div style="font-weight: 700; color: #1e293b; margin-bottom: 5px; font-size: 0.9rem;">{i+1}. {step['title']}</div>
+                <div style="font-size: 0.8rem; color: #64748b; line-height: 1.4;">{step['desc']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
 def render_metric_card(label, value, delta=None, color="#1e293b"):
     """Renderiza um card de métrica customizado."""
     delta_html = f'<span style="color: {color}; font-size: 0.875rem;">{delta}</span>' if delta else ""
