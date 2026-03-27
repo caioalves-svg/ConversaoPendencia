@@ -24,7 +24,7 @@ def main():
     processor = DataProcessor()
 
     # 3. Sidebar - Navegação Profissional
-    st.sidebar.image("https://www.intelipost.com.br/wp-content/uploads/2021/05/logo-intelipost.png", width=160)
+    st.sidebar.image("https://www.intelipost.com.br/wp-content/uploads/2023/05/logo-intelipost.png", width=160)
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
     
     menu = st.sidebar.radio(
