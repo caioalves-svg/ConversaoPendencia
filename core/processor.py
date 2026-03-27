@@ -71,7 +71,7 @@ class DataProcessor:
         s = str(val).strip().upper()
         return self.dict_mkt_norm.get(s, str(val))
 
-    def _aplicar_merge_e_filtros(self, df_entrada, df_sysemp, nfs_historico, prioritario_sysemp=False):
+    def _aplicar_merge_e_filtros(self, df_entrada, df_sysemp, nfs_historico, prioritario_sysemp=False, converter_ocorrencia=True):
         """Lógica comum de merge e padronização final."""
         df_merged = pd.merge(df_entrada, df_sysemp, on='Nota Fiscal', how='left')
 
@@ -84,7 +84,6 @@ class DataProcessor:
             df_merged['UF'] = df_merged['UF_sys'].fillna("N/A")
             df_merged['Marketplace Raw'] = df_merged['Marketplace_sys'].fillna("VERIFICAR")
         else:
-            # No Intelipost, tenta pegar do arquivo, se não tiver, vai pro Sysemp
             if 'UF' not in df_merged.columns:
                 df_merged['UF'] = df_merged['UF_sys'].fillna("N/A")
             
@@ -96,12 +95,17 @@ class DataProcessor:
         # Aplicar Dicionários no Marketplace
         df_merged['Marketplace Final'] = df_merged['Marketplace Raw'].apply(self._corrigir_mkt)
 
-        # Padronização de Transportadora e Ocorrência
+        # Padronização de Transportadora
         if 'Transportadora' in df_merged.columns:
             df_merged['Transportadora'] = df_merged['Transportadora'].map(CARRIERS).fillna(df_merged['Transportadora'])
         
+        # Padronização de Ocorrência (Opcional por fluxo)
         if 'Ocorrência de Entrega' in df_merged.columns:
-            df_merged['Ocorrência de Entrega'] = df_merged['Ocorrência de Entrega'].map(OCCURRENCES).fillna(df_merged['Ocorrência de Entrega'])
+            if converter_ocorrencia:
+                df_merged['Ocorrência de Entrega'] = df_merged['Ocorrência de Entrega'].map(OCCURRENCES).fillna(df_merged['Ocorrência de Entrega'])
+            else:
+                # No fluxo de e-mail, apenas garante que não é nulo, mas mantém o texto original
+                df_merged['Ocorrência de Entrega'] = df_merged['Ocorrência de Entrega'].fillna("VERIFICAR")
 
         df_merged['Data Tratativa'] = datetime.now().strftime('%d/%m/%Y')
 
@@ -160,4 +164,5 @@ class DataProcessor:
         df_email['Nota Fiscal'] = df_email['Nota Fiscal'].apply(normalizar_nf)
         
         # Seta a flag prioritario_sysemp=True para puxar UF e Mkt da base Sysemp
-        return self._aplicar_merge_e_filtros(df_email, df_sysemp, nfs_historico, prioritario_sysemp=True), None
+        # Seta converter_ocorrencia=False para manter o texto original da planilha de e-mail
+        return self._aplicar_merge_e_filtros(df_email, df_sysemp, nfs_historico, prioritario_sysemp=True, converter_ocorrencia=False), None
