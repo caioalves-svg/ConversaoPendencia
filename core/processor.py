@@ -115,7 +115,7 @@ class DataProcessor:
         if col_nf and col_nf != 'Nota Fiscal': df_inteli = df_inteli.rename(columns={col_nf: 'Nota Fiscal'})
         
         if 'Nota Fiscal' not in df_inteli.columns:
-            return None, None, "Coluna 'Nota Fiscal' não identificada no arquivo Intelipost."
+            return (None, None), "Coluna 'Nota Fiscal' não identificada no arquivo Intelipost."
 
         df_inteli['Nota Fiscal'] = df_inteli['Nota Fiscal'].apply(normalizar_nf)
         
@@ -132,7 +132,7 @@ class DataProcessor:
         col_ocorr = encontrar_coluna(df_email, ['OCORRÊNCIA', 'OCORRENCIA', 'STATUS'])
 
         if not all([col_nf, col_transp, col_ocorr]):
-            return None, None, "Colunas obrigatórias (NF, Transportadora, Ocorrência) não encontradas."
+            return (None, None), "Colunas obrigatórias (NF, Transportadora, Ocorrência) não encontradas."
 
         df_email = df_email.rename(columns={
             col_nf: 'Nota Fiscal',
