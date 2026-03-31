@@ -12,14 +12,15 @@ MARKETPLACES = {
     "MERCADO LIVRE - EXTREMA": "MERCADO LIVRE - EXTREMA", "shopee": "SHOPEE",
     "WEBCONTINENTAL": "WEBCONTINENTAL", "WAPSTORE - ENGAGE": "WAPSTORE - ENGAGE",
     "LEROY - EXTREMA": "LEROY - EXTREMA", "BRADESCO SHOP": "BRADESCO SHOP",
-    "TIKTOK": "TIKTOK", "AMAZON DBA": "AMAZON DBA", "Via Pajucara": "PAJUÇARA"
+    "TIKTOK": "TIKTOK", "AMAZON DBA": "AMAZON DBA"
 }
 
 CARRIERS = {
     "Atual Cargas": "ATUAL", "Brasil Web Standard": "BRASIL WEB", "Favorita Transportes": "FAVORITA",
     "FrontLog": "FRONTLOG", "Generoso": "GENEROSO", "JadLog": "JADLOG", "Logan Express": "LOGAN",
-    "MMA Cargas Expressas": "MMA", "Patrus": "PATRUS", "Reboucas": "REBOUÇAS", "Rede Sul": "REDE SUL",
-    "Rio Express Cargas": "RIO EXPRESS", "TJB": "TJB", "Total": "TOTAL", "Trilog Express": "TRILOG"
+    "MMA Cargas Expressas": "MMA", "Patrus": "PATRUS", "Reboucas": "REBOUÇAS", "REBOUCAS": "REBOUÇAS",
+    "Via Pajucara": "PAJUÇARA", "VIA PAJUCARA": "PAJUÇARA",
+    "Rede Sul": "REDE SUL", "Rio Express Cargas": "RIO EXPRESS", "TJB": "TJB", "Total": "TOTAL", "Trilog Express": "TRILOG"
 }
 
 OCCURRENCES = {

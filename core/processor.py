@@ -6,6 +6,8 @@ from utils.helpers import normalizar_nf, encontrar_coluna, carregar_arquivo
 class DataProcessor:
     def __init__(self):
         self.dict_mkt_norm = {k.upper(): v for k, v in MARKETPLACES.items()}
+        self.dict_transp_norm = {k.upper(): v for k, v in CARRIERS.items()}
+        self.dict_ocorr_norm = {k.upper(): v for k, v in OCCURRENCES.items()}
 
     def carregar_base_historico(self, file_base):
         """Carrega conjunto de NFs do histórico para exclusão."""
@@ -97,15 +99,17 @@ class DataProcessor:
 
         # Padronização de Transportadora
         if 'Transportadora' in df_merged.columns:
-            df_merged['Transportadora'] = df_merged['Transportadora'].map(CARRIERS).fillna(df_merged['Transportadora'])
+            transp_upper = df_merged['Transportadora'].astype(str).str.upper().str.strip()
+            df_merged['Transportadora'] = transp_upper.map(self.dict_transp_norm).fillna(transp_upper)
         
         # Padronização de Ocorrência (Opcional por fluxo)
         if 'Ocorrência de Entrega' in df_merged.columns:
+            ocorr_upper = df_merged['Ocorrência de Entrega'].astype(str).str.upper().str.strip()
             if converter_ocorrencia:
-                df_merged['Ocorrência de Entrega'] = df_merged['Ocorrência de Entrega'].map(OCCURRENCES).fillna(df_merged['Ocorrência de Entrega'])
+                df_merged['Ocorrência de Entrega'] = ocorr_upper.map(self.dict_ocorr_norm).fillna(ocorr_upper)
             else:
-                # No fluxo de e-mail, apenas garante que não é nulo, mas mantém o texto original
-                df_merged['Ocorrência de Entrega'] = df_merged['Ocorrência de Entrega'].fillna("VERIFICAR")
+                # No fluxo de e-mail, mantém o texto original mas garante que está em MAIÚSCULO
+                df_merged['Ocorrência de Entrega'] = ocorr_upper.replace('NAN', 'VERIFICAR').fillna("VERIFICAR")
 
         df_merged['Data Tratativa'] = datetime.now().strftime('%d/%m/%Y')
 
