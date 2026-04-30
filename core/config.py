@@ -1,4 +1,4 @@
-# ==============================================================================
+# ===========================================================================
 # CONFIGURAÇÕES E DICIONÁRIOS GLOBAIS
 # ==============================================================================
 
@@ -47,8 +47,24 @@ OCCURRENCES = {
     "ZONA RURAL": "VERIFICAR", "CARGA INCOMPLETA": "AVARIA PARCIAL"
 }
 
-# Colunas Finais Padrão
+# Colunas Finais Padrão (Fluxos Intelipost / E-mail)
 FINAL_COLUMNS = [
     'Transportadora', 'Chave NF', 'Nota Fiscal', 'UF',
     'Data Tratativa', 'Marketplace', 'Pedido', 'Ocorrência de Entrega'
+]
+
+# Colunas Finais — Fluxo Validação de Transportadora
+# Ordem fixa, conforme especificação operacional do módulo.
+FINAL_COLUMNS_VALIDACAO = [
+    'DIA DA TRATATIVA',
+    'DATA PEDIDO',
+    'DATA PREVISTA',
+    'UF',
+    'TRANSPORTADORA',
+    'PEDIDO INTELIPOST',
+    'CHAVE DA NF',
+    'MARKETPLACE',
+    'N° PEDIDO',
+    'NOTA FISCAL',
+    'STATUS DA TRANSPORTADORA',
 ]
