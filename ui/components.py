@@ -17,6 +17,13 @@ def render_instructions(tipo="intelipost"):
             {"icon": "🔍", "title": "Histórico (Opcional)", "desc": "Use uma planilha anterior para ignorar NFs já tratadas."},
             {"icon": "🚀", "title": "Processamento", "desc": "Clique no botão de processar e baixe o arquivo final."}
         ]
+    elif tipo == "validacao":
+        steps = [
+            {"icon": "📥", "title": "Extração Intelipost", "desc": "Exporte as transações do portal Intelipost (CSV ou XLSX)."},
+            {"icon": "🖥️", "title": "Base Sysemp", "desc": "Gere o relatório de 'Manutenção de Notas Fiscais' no Sysemp."},
+            {"icon": "🛡️", "title": "NFs em Tratamento", "desc": "Suba o histórico de NFs em tratamento para descartar duplicidades."},
+            {"icon": "✅", "title": "Validação & Export", "desc": "Confronta transportadoras e exporta planilha final auditada."}
+        ]
     else:
         steps = [
             {"icon": "📧", "title": "Dados de E-mail", "desc": "Prepare a planilha com: Nota Fiscal, Transportadora e Ocorrência."},
@@ -48,33 +55,47 @@ def render_metric_card(label, value, delta=None, color="#1e293b"):
     </div>
     """, unsafe_allow_html=True)
 
-def render_results_tabs(df_final, df_removidas):
-    """Renderiza as tabs de resultados e exportação."""
-    tab1, tab2 = st.tabs(["📋 Novas Tratativas", "🗑️ Removidas pelo Histórico"])
-    
+def render_results_tabs(
+    df_final,
+    df_removidas,
+    nome_arquivo="Tratativas_Full",
+    sheet_principal="Tratativas (Novas)",
+    sheet_removidas="Removidas (No Histórico)",
+    label_principal="📋 Novas Tratativas",
+    label_removidas="🗑️ Removidas pelo Histórico",
+    msg_vazio_principal="Nenhuma nova pendência para tratar.",
+    msg_vazio_removidas="Nenhum registro foi removido.",
+):
+    """Renderiza as tabs de resultados e exportação.
+
+    Mantém retrocompatibilidade: chamar sem parâmetros adicionais reproduz
+    exatamente o comportamento anterior dos fluxos Intelipost e E-mail.
+    """
+    tab1, tab2 = st.tabs([label_principal, label_removidas])
+
     with tab1:
         if not df_final.empty:
             st.dataframe(df_final, use_container_width=True)
-            
+
             # Preparar buffer Excel
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_final.to_excel(writer, index=False, sheet_name='Tratativas (Novas)')
-                df_removidas.to_excel(writer, index=False, sheet_name='Removidas (No Histórico)')
-            
+                df_final.to_excel(writer, index=False, sheet_name=sheet_principal)
+                df_removidas.to_excel(writer, index=False, sheet_name=sheet_removidas)
+
             st.download_button(
                 label="📥 BAIXAR PLANILHA COMPLETA (.xlsx)",
                 data=buffer.getvalue(),
-                file_name=f"Tratativas_Full_{datetime.now().strftime('%d-%m')}.xlsx",
+                file_name=f"{nome_arquivo}_{datetime.now().strftime('%d-%m')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
             )
         else:
-            st.info("Nenhuma nova pendência para tratar.")
+            st.info(msg_vazio_principal)
 
     with tab2:
         if not df_removidas.empty:
             st.dataframe(df_removidas, use_container_width=True)
         else:
-            st.write("Nenhum registro foi removido.")
+            st.write(msg_vazio_removidas)
