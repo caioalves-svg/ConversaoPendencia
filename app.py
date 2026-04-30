@@ -19,33 +19,37 @@ st.set_page_config(
 def main():
     # 1. Aplica Design System
     apply_global_styles()
-    
+
     # 2. Inicializa Processador
     processor = DataProcessor()
 
     # 3. Sidebar - Navegação Profissional
     st.sidebar.image("https://intelipost-assets.s3.amazonaws.com/images/logo/logo-intelipost.png", width=160)
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
-    
+
     menu = st.sidebar.radio(
         "MÓDULOS DO SISTEMA",
-        ["📦 Pendência - Intelipost", "📧 Pendência - E-mail"],
+        [
+            "📦 Pendência - Intelipost",
+            "📧 Pendência - E-mail",
+            "🔍 Validação de Transportadora",
+        ],
         index=0
     )
-    
+
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"""
         <div style='color: #64748b; font-size: 0.8rem;'>
-            <b>Versão:</b> 3.0.0 Enterprise<br>
+            <b>Versão:</b> 3.1.0 Enterprise<br>
             <b>Data:</b> {datetime.now().strftime('%d/%m/%Y')}
         </div>
     """, unsafe_allow_html=True)
 
     # 4. Seleção de Fluxo
-    if "Intelipost" in menu:
+    if "Intelipost" in menu and "Validação" not in menu:
         render_header("Pendência - Intelipost", "Automação avançada para cruzamento de transações logísticas.")
         render_instructions("intelipost")
-        
+
         with st.container():
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -64,12 +68,43 @@ def main():
             else:
                 st.warning("⚠️ Selecione os arquivos de origem (Intelipost e Sysemp).")
 
+    elif "Validação" in menu:
+        render_header(
+            "Validação de Transportadora",
+            "Confronta transportadora Intelipost x Sysemp por nº de pedido e gera planilha auditada."
+        )
+        render_instructions("validacao")
+
+        st.info(
+            "💡 Regras: (1) NFs presentes no histórico são descartadas. "
+            "(2) Pedido Intelipost é cruzado com o Sysemp pela coluna **marketplace**. "
+            "(3) Transportadora é validada — `Verdadeiro` quando coincide, `Falso` quando substituída pelo Sysemp."
+        )
+
+        with st.container():
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown("### 1. Intelipost")
+                file_source = st.file_uploader("Upload Transações Intelipost", type=["xlsx", "csv"], key="inteli_val")
+            with c2:
+                st.markdown("### 2. Sysemp")
+                file_sys = st.file_uploader("Upload Manutenção NF", type=["xlsx", "csv"], key="sys_val")
+            with c3:
+                st.markdown("### 3. NFs em Tratamento")
+                file_hist = st.file_uploader("Histórico / NFs em Tratamento", type=["xlsx", "csv"], key="hist_val")
+
+        if st.button("🚀 PROCESSAR VALIDAÇÃO"):
+            if file_source and file_sys:
+                executar_processamento(processor, "validacao", file_source, file_sys, file_hist)
+            else:
+                st.warning("⚠️ Selecione os arquivos de origem (Intelipost e Sysemp).")
+
     else:
         render_header("Pendência - E-mail", "Fluxo ágil para tratativas recebidas via comunicação direta.")
         render_instructions("email")
-        
+
         st.info("💡 Certifique-se que o arquivo de e-mail contém: **Nota Fiscal, Transportadora e Ocorrência**.")
-        
+
         with st.container():
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -109,6 +144,8 @@ def executar_processamento(processor, tipo, file_source, file_sys, file_hist):
             st.write("🔄 Cruzando dados e aplicando dicionários...")
             if tipo == "intelipost":
                 (df_f, df_r), err_p = processor.processar_intelipost(df_source_raw, df_sys_clean, nfs_hist)
+            elif tipo == "validacao":
+                (df_f, df_r), err_p = processor.processar_validacao_transportadora(df_source_raw, df_sys_clean, nfs_hist)
             else:
                 (df_f, df_r), err_p = processor.processar_email(df_source_raw, df_sys_clean, nfs_hist)
 
@@ -125,8 +162,31 @@ def executar_processamento(processor, tipo, file_source, file_sys, file_hist):
             with m2: render_metric_card("Removidas (Histórico)", len(df_r), color="#dc2626")
             with m3: render_metric_card("Novas para Tratar", len(df_f), color="#16a34a")
 
-            # Resultados
-            render_results_tabs(df_f, df_r)
+            # Resultados — labels e nome de arquivo customizados por fluxo
+            if tipo == "validacao":
+                # Indicadores específicos do fluxo de validação
+                if not df_f.empty and 'STATUS DA TRANSPORTADORA' in df_f.columns:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    n_verd = int((df_f['STATUS DA TRANSPORTADORA'] == 'Verdadeiro').sum())
+                    n_fals = int((df_f['STATUS DA TRANSPORTADORA'] == 'Falso').sum())
+                    n_nloc = int((df_f['STATUS DA TRANSPORTADORA'] == 'Não Localizado').sum())
+                    v1, v2, v3 = st.columns(3)
+                    with v1: render_metric_card("Verdadeiros", n_verd, color="#16a34a")
+                    with v2: render_metric_card("Falsos (Substituídos)", n_fals, color="#dc2626")
+                    with v3: render_metric_card("Não Localizados", n_nloc, color="#f59e0b")
+
+                render_results_tabs(
+                    df_f, df_r,
+                    nome_arquivo="Validacao_Transportadora",
+                    sheet_principal="Validação",
+                    sheet_removidas="Descartadas (Histórico)",
+                    label_principal="✅ Resultado da Validação",
+                    label_removidas="🗑️ Descartadas pelo Histórico",
+                    msg_vazio_principal="Nenhum pedido para validar após o filtro de histórico.",
+                    msg_vazio_removidas="Nenhuma NF foi descartada pelo histórico.",
+                )
+            else:
+                render_results_tabs(df_f, df_r)
 
         except Exception as e:
             st.error(f"🚨 ERRO CRÍTICO: {str(e)}")
