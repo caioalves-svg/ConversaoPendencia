@@ -32,7 +32,7 @@ def main():
         [
             "📦 Pendência - Intelipost",
             "📧 Pendência - E-mail",
-            "🔍 Validação de Transportadora",
+            "⏰ Pendência - Atraso",
         ],
         index=0
     )
@@ -46,7 +46,7 @@ def main():
     """, unsafe_allow_html=True)
 
     # 4. Seleção de Fluxo
-    if "Intelipost" in menu and "Validação" not in menu:
+    if "Intelipost" in menu and "Atraso" not in menu:
         render_header("Pendência - Intelipost", "Automação avançada para cruzamento de transações logísticas.")
         render_instructions("intelipost")
 
@@ -68,10 +68,10 @@ def main():
             else:
                 st.warning("⚠️ Selecione os arquivos de origem (Intelipost e Sysemp).")
 
-    elif "Validação" in menu:
+    elif "Atraso" in menu:
         render_header(
-            "Validação de Transportadora",
-            "Confronta transportadora Intelipost x Sysemp por nº de pedido e gera planilha auditada."
+            "Pendência - Atraso",
+            "Tratativa de pendências por atraso — confronta transportadora Intelipost x Sysemp e gera planilha auditada."
         )
         render_instructions("validacao")
 
@@ -93,7 +93,7 @@ def main():
                 st.markdown("### 3. NFs em Tratamento")
                 file_hist = st.file_uploader("Histórico / NFs em Tratamento", type=["xlsx", "csv"], key="hist_val")
 
-        if st.button("🚀 PROCESSAR VALIDAÇÃO"):
+        if st.button("🚀 PROCESSAR ATRASO"):
             if file_source and file_sys:
                 executar_processamento(processor, "validacao", file_source, file_sys, file_hist)
             else:
