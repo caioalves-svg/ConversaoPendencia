@@ -1,4 +1,4 @@
-# ==============================================================================
+# ===========================================================================
 # CONFIGURAÇÕES E DICIONÁRIOS GLOBAIS
 # ==============================================================================
 
@@ -16,11 +16,124 @@ MARKETPLACES = {
 }
 
 CARRIERS = {
-    "Atual Cargas": "ATUAL", "Brasil Web Standard": "BRASIL WEB", "Favorita Transportes": "FAVORITA",
-    "FrontLog": "FRONTLOG", "Generoso": "GENEROSO", "JadLog": "JADLOG", "Logan Express": "LOGAN",
-    "MMA Cargas Expressas": "MMA", "Patrus": "PATRUS", "Reboucas": "REBOUÇAS", "REBOUCAS": "REBOUÇAS",
+    # Forma curta canonica (Intelipost)
+    "Atual Cargas": "ATUAL",
+    "Brasil Web Standard": "BRASIL WEB",
+    "Favorita Transportes": "FAVORITA",
+    "FrontLog": "FRONTLOG",
+    "Generoso": "GENEROSO",
+    "JadLog": "JADLOG",
+    "Logan Express": "LOGAN",
+    "MMA Cargas Expressas": "MMA",
+    "Patrus": "PATRUS",
+    "Reboucas": "REBOUÇAS", "REBOUCAS": "REBOUÇAS",
+    "Rede Sul": "REDE SUL",
+    "Rio Express Cargas": "RIO EXPRESS",
+    "TJB": "TJB",
+    "Total": "TOTAL",
+    "Trilog Express": "TRILOG",
     "Via Pajucara": "PAJUÇARA", "VIA PAJUCARA": "PAJUÇARA",
-    "Rede Sul": "REDE SUL", "Rio Express Cargas": "RIO EXPRESS", "TJB": "TJB", "Total": "TOTAL", "Trilog Express": "TRILOG"
+
+    # ---------- Variantes Sysemp (com sufixos SERRA / EXTREMA / SDF / IDs de empresa) ---------- #
+    # BRASIL WEB
+    "BRASIL WEB TRANSPORTES EXTREMA SDF 21": "BRASIL WEB",
+    "BRASIL WEB TRANSPORTES SERRA SDF 18": "BRASIL WEB",
+    "BRASIL WEB TRANSPORTES SERRA 19": "BRASIL WEB",
+    "BRASIL WEB TRANSPORTES SERRA 18": "BRASIL WEB",
+    "BRASIL WEB TRANSPORTES SERRA 18 SDF": "BRASIL WEB",
+    "BRASIL WEB SP SDF 21": "BRASIL WEB",
+    "BRASIL WEB STANDARD 21": "BRASIL WEB",
+    "BRASIL WEB NOVA EXTREMA 21": "BRASIL WEB",
+
+    # FRONTLOG
+    "FRONTLOG EXTREMA SDF 21": "FRONTLOG",
+    "FRONTLOG EXTREMA 21": "FRONTLOG",
+
+    # JADLOG
+    "JADLOG LOGISTICA SERRA SDF 18": "JADLOG",
+    "JADLOG TRANSPORTES SERRA 18": "JADLOG",
+    "JADLOG TRANSPORTES SERRA 19": "JADLOG",
+
+    # MMA
+    "MMA CARGAS EXPRESSAS 21": "MMA",
+    "MMA TRANSPORTES NOVA EXTREMA 21 SDF": "MMA",
+    "MMA TRANSPORTES SERRA SDF 18": "MMA",
+    "MMA TRANSPORTES SERRA 18": "MMA",
+    "MMA TRANSPORTES SERRA 19": "MMA",
+
+    # REDE SUL
+    "REDE SUL SERRA 18": "REDE SUL",
+    "REDE SUL SERRA 19": "REDE SUL",
+    "REDE SUL SERRA SDF 18": "REDE SUL",
+
+    # TJB
+    "TJB - TRANSPORTADORA 21": "TJB",
+    "TJB - TRANSPORTADORA SERRA 18": "TJB",
+    "TJB - TRANSPORTADORA SERRA 19": "TJB",
+    "TJB - TRANSPORTADORA SERRA SDF 18": "TJB",
+    "TJB - TRANSPORTADORA SERRA SDF 19": "TJB",
+    "TJB - TRANSPORTADORA SDF 21": "TJB",
+
+    # TOTAL
+    "TOTAL EXPRESS SERRA 18": "TOTAL",
+    "TOTAL EXPRESS SERRA 19": "TOTAL",
+    "TOTAL TRANSPORTADORA 21": "TOTAL",
+    "TOTAL TRANSPORTADORA SERRA SDF 18": "TOTAL",
+    "TOTAL NOVA EXTREMA 21 SDF": "TOTAL",
+
+    # TRILOG
+    "TRILOG EXPRESS 21": "TRILOG",
+    "TRILOG EXPRESS SERRA 18": "TRILOG",
+    "TRILOG EXPRESS SERRA 19": "TRILOG",
+    "TRILOG EXPRESS SERRA SDF 18": "TRILOG",
+    "TRILOG NOVA EXTREMA SDF 21": "TRILOG",
+
+    # FAVORITA
+    "FAVORITA TRANSPORTES SERRA 18": "FAVORITA",
+    "FAVORITA TRANSPORTES SERRA 19": "FAVORITA",
+    "FAVORITA TRANSPORTES SERRA SDF 18": "FAVORITA",
+    "FAVORITA TRANSPORTES EXTREMA SDF 21": "FAVORITA",
+    "FAVORITA NOVA EXTREMA 21": "FAVORITA",
+
+    # RIO EXPRESS
+    "RIO EXPRESS SERRA 18": "RIO EXPRESS",
+    "RIO EXPRESS SERRA 19": "RIO EXPRESS",
+    "RIO EXPRESS SERRA SDF 18": "RIO EXPRESS",
+    "RIO EXPRESS SERRA SDF 19": "RIO EXPRESS",
+
+    # PAJUÇARA  (inclui typo PAJUÇURA mantido conforme fonte)
+    "VIA PAJUÇARA NOVA EXTREMA SDF 21": "PAJUÇARA",
+    "VIA PAJUÇARA SERRA 18": "PAJUÇARA",
+    "VIA PAJUÇARA SERRA 19": "PAJUÇARA",
+    "VIA PAJUÇARA SERRA SDF 18": "PAJUÇARA",
+    "VIA PAJUÇURA NOVA EXTREMA 21": "PAJUÇARA",
+
+    # ATUAL
+    "ATUAL CARGAS SERRA 18": "ATUAL",
+    "ATUAL CARGAS SERRA 19": "ATUAL",
+    "ATUAL TRANSPORTADORA SERRA SDF 18": "ATUAL",
+
+    # REBOUÇAS
+    "REBOUÇAS SERRA 16": "REBOUÇAS",
+    "REBOUÇAS SERRA 18": "REBOUÇAS",
+    "REBOUÇAS SERRA 19": "REBOUÇAS",
+    "REBOUÇAS SERRA SDF 18": "REBOUÇAS",
+
+    # PATRUS
+    "PATRUS NOVA EXTREMA SDF 21": "PATRUS",
+    "PATRUS TRANSPORTES EXTREMA 21": "PATRUS",
+    "PATRUS TRANSPORTES SERRA 18": "PATRUS",
+    "PATRUS TRANSPORTES SERRA 19": "PATRUS",
+    "PATRUS TRANSPORTADORA SERRA SDF 18": "PATRUS",
+
+    # GENEROSO
+    "GENEROSO SERRA 18": "GENEROSO",
+    "GENEROSO SERRA 19": "GENEROSO",
+    "GENEROSO TRANSPORTES SERRA SDF 18": "GENEROSO",
+
+    # Outros (passam pelo dicionario para preservar a grafia desejada)
+    "AMAZON CLASSIC FBA BETIM": "AMAZON CLASSIC FBA BETIM",
+    "TIKTOK": "TIKTOK",
 }
 
 OCCURRENCES = {
