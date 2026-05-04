@@ -41,6 +41,50 @@ class DataProcessor:
             .str.strip()
         )
 
+    @staticmethod
+    def _fmt_data_br(df, col, default=""):
+        """
+        Formata coluna de data para padrão brasileiro.
+        Entrada: '2026-03-29 12:51:46', '2026-03-29', datetime, NaT, etc.
+        Saída:
+            * Se houver hora não-zero -> 'DD/MM/YYYY HH:MM:SS'
+            * Caso contrário          -> 'DD/MM/YYYY'
+            * Vazio/inválido          -> default ("")
+        """
+        if col is None or col not in df.columns:
+            return pd.Series([default] * len(df), index=df.index)
+
+        # format='mixed' permite que cada linha seja parseada com o formato dela
+        # (algumas com hora, outras só data). Sem isso, pandas infere pelo primeiro
+        # elemento e torna NaT as linhas que não casam.
+        try:
+            dts = pd.to_datetime(df[col], errors='coerce', format='mixed')
+        except (TypeError, ValueError):
+            # Fallback para versões antigas do pandas (<2.0)
+            dts = pd.to_datetime(df[col], errors='coerce')
+
+        def _fmt(dt):
+            if pd.isna(dt):
+                # Tenta preservar o original quando não foi possível parsear como data
+                return default
+            if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+                return dt.strftime('%d/%m/%Y')
+            return dt.strftime('%d/%m/%Y %H:%M:%S')
+
+        formatted = dts.apply(_fmt)
+
+        # Para valores não parseáveis, devolve string original (ex.: "VERIFICAR")
+        original = df[col].astype(str).str.strip()
+        mask_fallback = dts.isna() & original.replace({'nan': '', 'NaT': '', 'None': ''}).ne('')
+        formatted = formatted.where(~mask_fallback, original)
+        return formatted
+
+    @staticmethod
+    def _normalizar_transp(serie, dicionario):
+        """Aplica o dicionário de transportadoras (já com chaves UPPER)."""
+        upper = serie.astype(str).str.upper().str.strip()
+        return upper.map(dicionario).fillna(upper)
+
     # --------------------------------------------------------------------- #
     # Carregamento e tratamento Sysemp (compartilhado entre módulos)
     # --------------------------------------------------------------------- #
@@ -290,15 +334,21 @@ class DataProcessor:
             how='left'
         )
 
-        transp_inteli = df_merged[col_transp].astype(str).str.upper().str.strip()
-        transp_sys    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+        # Aplica o dicionario CARRIERS dos dois lados (canonicaliza nomes longos
+        # do Sysemp como "JADLOG TRANSPORTES SERRA 18" -> "JADLOG"). Assim a
+        # comparacao reflete a transportadora real, e nao o sufixo da empresa.
+        transp_inteli_raw = df_merged[col_transp].astype(str).str.upper().str.strip()
+        transp_sys_raw    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+
+        transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
+        transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
 
         encontrado = (
             df_merged['Transportadora_sys'].notna()
-            & (transp_sys != "")
-            & (transp_sys != "NAN")
+            & (transp_sys_raw != "")
+            & (transp_sys_raw != "NAN")
         )
-        iguais = encontrado & (transp_inteli == transp_sys)
+        iguais     = encontrado & (transp_inteli == transp_sys)
         diferentes = encontrado & (transp_inteli != transp_sys)
 
         # Status final
@@ -307,11 +357,11 @@ class DataProcessor:
             np.where(iguais, "Verdadeiro", "Falso")
         )
 
-        # Transportadora final (preserva grafia original — Intelipost ou Sysemp)
+        # Transportadora final: usa o valor canonico (do dicionario)
         transp_final = np.where(
             diferentes,
-            df_merged['Transportadora_sys'].astype(str).str.strip(),
-            df_merged[col_transp].astype(str).str.strip(),
+            transp_sys,
+            transp_inteli,
         )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
@@ -319,8 +369,8 @@ class DataProcessor:
 
         df_final = pd.DataFrame({
             'DIA DA TRATATIVA':         hoje,
-            'DATA PEDIDO':              self._fmt_col(df_merged, col_data_criacao),
-            'DATA PREVISTA':            self._fmt_col(df_merged, col_previsao),
+            'DATA PEDIDO':              self._fmt_data_br(df_merged, col_data_criacao),
+            'DATA PREVISTA':            self._fmt_data_br(df_merged, col_previsao),
             'UF':                       self._fmt_col(df_merged, col_uf).str.upper(),
             'TRANSPORTADORA':           pd.Series(transp_final, index=df_merged.index),
             'PEDIDO INTELIPOST':        self._fmt_col(df_merged, col_pedido_inte),
@@ -337,13 +387,18 @@ class DataProcessor:
                 df_final[c] = ""
         df_final = df_final[FINAL_COLUMNS_VALIDACAO]
 
-        # Linhas descartadas pelo histórico — mesmo schema, para auditoria
+        # Linhas descartadas pelo histórico — mesmo schema, para auditoria.
+        # Aplica também o dicionário de transportadora para padronizar a saída.
+        transp_desc = self._normalizar_transp(
+            self._fmt_col(df_descartadas_raw, col_transp),
+            self.dict_transp_norm,
+        )
         df_descartadas = pd.DataFrame({
             'DIA DA TRATATIVA':         hoje,
-            'DATA PEDIDO':              self._fmt_col(df_descartadas_raw, col_data_criacao),
-            'DATA PREVISTA':            self._fmt_col(df_descartadas_raw, col_previsao),
+            'DATA PEDIDO':              self._fmt_data_br(df_descartadas_raw, col_data_criacao),
+            'DATA PREVISTA':            self._fmt_data_br(df_descartadas_raw, col_previsao),
             'UF':                       self._fmt_col(df_descartadas_raw, col_uf).str.upper(),
-            'TRANSPORTADORA':           self._fmt_col(df_descartadas_raw, col_transp),
+            'TRANSPORTADORA':           transp_desc,
             'PEDIDO INTELIPOST':        self._fmt_col(df_descartadas_raw, col_pedido_inte),
             'CHAVE DA NF':              self._fmt_col(df_descartadas_raw, col_chave_nf),
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
