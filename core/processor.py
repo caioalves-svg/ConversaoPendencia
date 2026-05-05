@@ -264,7 +264,7 @@ class DataProcessor:
 
         ETAPA 1 — Cruza Intelipost x Histórico/NFs em tratamento por 'Nota Fiscal'.
                    Linhas presentes no histórico são DESCARTADAS.
-        ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido (coluna 'marketplace').
+        ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido (coluna 'Pedido Marketplace').
                    Compara transportadora Intelipost x transportadora Sysemp:
                        diferentes -> usa Sysemp,       STATUS = 'Falso'
                        iguais ou
@@ -298,13 +298,13 @@ class DataProcessor:
         col_pedido_inte  = encontrar_coluna(df, ['Pedido', 'Pedido Intelipost', 'Pedido ID'])
         col_chave_nf     = encontrar_coluna(df, ['Chave da Nota', 'Chave NF', 'Chave da NF', 'Chave NFe'])
         col_canal        = encontrar_coluna(df, ['Canal de Vendas', 'Canal de Venda'])
-        col_num_pedido   = encontrar_coluna(df, ['marketplace', 'Marketplace', 'N° Pedido', 'Nº Pedido', 'Pedido Marketplace'])
+        col_num_pedido   = encontrar_coluna(df, ['Pedido Marketplace', 'marketplace', 'Marketplace', 'N° Pedido', 'Nº Pedido'])
         col_nf           = encontrar_coluna(df, ['Nota Fiscal', 'NF', 'Numero NF'])
 
         # ----- Validações obrigatórias ------------------------------------- #
         faltando = []
         if not col_nf:           faltando.append("Nota Fiscal")
-        if not col_num_pedido:   faltando.append("marketplace (N° Pedido)")
+        if not col_num_pedido:   faltando.append("Pedido Marketplace (N° Pedido)")
         if not col_transp:       faltando.append("Transportadora")
         if faltando:
             return (None, None), (
