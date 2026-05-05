@@ -560,23 +560,23 @@ class DataProcessor:
         else:
             df_descartadas = pd.DataFrame(columns=FINAL_COLUMNS_VALIDACAO)
 
-        # ----- ETAPA 4 — Filtra DATA PREVISTA = ontem (BRT) ---------------- #
-        # Usa timezone do Brasil para calcular "ontem" — evita bug de fuso
-        # quando o servidor roda em UTC. Compara via datetime parseado
-        # (mais robusto que comparacao de string).
+        # ----- ETAPA 4 — Filtra DATA PREVISTA <= ontem (BRT) --------------- #
+        # Mantem apenas linhas com DATA PREVISTA do dia anterior PRA TRAS
+        # (ontem + todas as anteriores). Hoje e futuras sao excluidas.
+        # Usa timezone do Brasil para evitar bug de fuso em servidor UTC.
+        # Linhas com DATA PREVISTA invalida (NaT apos parse) sao descartadas.
         ontem_dt = (datetime.now(TZ_BR) - timedelta(days=1)).date()
 
-        def _filtra_dia_anterior(df):
+        def _filtra_ate_ontem(df):
             if df.empty:
                 return df
-            # Parseia DATA PREVISTA tentando dayfirst (formato BR DD/MM/YYYY).
             datas = pd.to_datetime(
                 df['DATA PREVISTA'], errors='coerce', dayfirst=True, format='mixed'
             )
-            mask = datas.dt.date == ontem_dt
+            mask = datas.dt.date <= ontem_dt
             return df[mask].copy()
 
-        df_final       = _filtra_dia_anterior(df_final)
-        df_descartadas = _filtra_dia_anterior(df_descartadas)
+        df_final       = _filtra_ate_ontem(df_final)
+        df_descartadas = _filtra_ate_ontem(df_descartadas)
 
         return (df_final, df_descartadas), None
