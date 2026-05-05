@@ -263,7 +263,7 @@ class DataProcessor:
     # --------------------------------------------------------------------- #
     # NOVO MÓDULO — Validação de Transportadora
     # --------------------------------------------------------------------- #
-    def processar_validacao_transportadora(self, df_inteli, df_sysemp, nfs_historico):
+    def processar_validacao_transportadora(self, df_inteli, df_sysemp, nfs_historico, df_sys_raw=None):
         """
         Motor do fluxo "Validação de Transportadora".
 
@@ -358,6 +358,35 @@ class DataProcessor:
             how='left'
         )
 
+        # Lookup adicional de N° PEDIDO contra o Sysemp BRUTO (sem o filtro
+        # de empresa de tratar_sysemp). Necessario porque pedidos B2B/TIKTOK
+        # direto podem estar em empresas fora do filtro [16,18,19,21] mas a
+        # NF e o Pedido Marketplace existem no arquivo do Sysemp.
+        # Esse lookup soh alimenta a coluna N° PEDIDO; status/transportadora
+        # continuam usando o Sysemp filtrado.
+        if df_sys_raw is not None and not df_sys_raw.empty:
+            col_nf_full     = encontrar_coluna(df_sys_raw, ['Nota Fiscal', 'NF', 'Numero NF'])
+            col_pedido_full = encontrar_coluna(df_sys_raw, ['Pedido Marketplace'])
+            if col_nf_full and col_pedido_full:
+                pedido_full_lookup = pd.DataFrame({
+                    '_NF_FULL_KEY': df_sys_raw[col_nf_full].apply(normalizar_nf),
+                    '_PEDIDO_FULL': df_sys_raw[col_pedido_full].apply(self._normalizar_pedido),
+                })
+                pedido_full_lookup = pedido_full_lookup[
+                    (pedido_full_lookup['_NF_FULL_KEY'] != '')
+                    & (pedido_full_lookup['_PEDIDO_FULL'] != '')
+                ]
+                pedido_full_lookup = pedido_full_lookup.drop_duplicates(
+                    subset='_NF_FULL_KEY', keep='first'
+                )
+                df_merged = pd.merge(
+                    df_merged,
+                    pedido_full_lookup,
+                    left_on='_NF_NORM',
+                    right_on='_NF_FULL_KEY',
+                    how='left',
+                )
+
         # Comparacao usa o dicionario CARRIERS dos dois lados para canonicalizar
         # nomes longos do Sysemp ("JADLOG TRANSPORTES SERRA 18" -> "JADLOG"),
         # de modo que sejam tratados como iguais quando representam a mesma
@@ -393,12 +422,29 @@ class DataProcessor:
         # Transportadora final: Sysemp raw quando diferentes; Intelipost raw caso contrario.
         transp_final = np.where(diferentes, transp_sys_out, transp_inteli_out)
 
-        # N° PEDIDO final — vem APENAS do Sysemp 'Pedido Marketplace' (do merge).
-        # Sem fallback para Intelipost.marketplace. Trava anti-branco final
-        # com 'NÃO INFORMADO' caso o Sysemp nao tenha o pedido.
+        # N° PEDIDO final — VLOOKUP por NF, com cadeia de fallback:
+        #   1. Sysemp BRUTO 'Pedido Marketplace' (sem filtro de empresa —
+        #      cobre B2B/TIKTOK direto que ficam fora de [16,18,19,21])
+        #   2. Sysemp FILTRADO 'Pedido_sys' (do merge principal)
+        #   3. Intelipost 'marketplace' (_PEDIDO_NORM)
+        #   4. 'NÃO INFORMADO' (trava anti-branco)
+        _NULOS = ['nan', 'NaN', 'None', '<NA>', '']
+        if '_PEDIDO_FULL' in df_merged.columns:
+            pedido_sys_full = (
+                df_merged['_PEDIDO_FULL'].astype(str).str.strip().replace(_NULOS, pd.NA)
+            )
+        else:
+            pedido_sys_full = pd.Series(pd.NA, index=df_merged.index)
+        pedido_sys_filt = (
+            df_merged['Pedido_sys'].astype(str).str.strip().replace(_NULOS, pd.NA)
+        )
+        pedido_int = (
+            df_merged['_PEDIDO_NORM'].astype(str).str.strip().replace(_NULOS, pd.NA)
+        )
         serie_pedido_final = (
-            df_merged['Pedido_sys'].astype(str).str.strip()
-            .replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
+            pedido_sys_full
+            .fillna(pedido_sys_filt)
+            .fillna(pedido_int)
             .fillna('NÃO INFORMADO')
         )
 
