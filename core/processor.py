@@ -269,10 +269,11 @@ class DataProcessor:
 
         ETAPA 1 — Cruza Intelipost x Histórico/NFs em tratamento por 'Nota Fiscal'.
                    Linhas presentes no histórico são DESCARTADAS.
-        ETAPA 2 — Cruza Intelipost x Sysemp pela NOTA FISCAL (chave mais
-                   estável que o nº de pedido). N° PEDIDO de saída é puxado
-                   do Sysemp ('Pedido Marketplace') quando disponível, com
-                   fallback para o pedido normalizado da Intelipost.
+        ETAPA 2 — Cruza Intelipost x Sysemp pela CHAVE DA NF (44 dígitos),
+                   chave globalmente única e mais estável que NF/pedido.
+                   N° PEDIDO de saída é puxado do Sysemp ('Pedido Marketplace')
+                   quando disponível, com fallback para o pedido normalizado
+                   da Intelipost.
                    Compara transportadora Intelipost x transportadora Sysemp
                    APÓS canonicalização pelo dicionário CARRIERS — assim
                    "JADLOG TRANSPORTES SERRA 18" e "JADLOG" são tratados
@@ -315,10 +316,10 @@ class DataProcessor:
         col_nf           = encontrar_coluna(df, ['Nota Fiscal', 'NF', 'Numero NF'])
 
         # ----- Validações obrigatórias ------------------------------------- #
-        # col_num_pedido nao eh mais obrigatorio: o merge eh por NF.
-        # Se ausente, N° PEDIDO de saida usa apenas o que vier do Sysemp.
+        # Merge eh pela CHAVE DA NF — col_chave_nf eh obrigatoria.
+        # col_nf e col_num_pedido sao opcionais (so alimentam saida + historico).
         faltando = []
-        if not col_nf:           faltando.append("Nota Fiscal")
+        if not col_chave_nf:     faltando.append("Chave da Nota")
         if not col_transp:       faltando.append("Transportadora")
         if faltando:
             return (None, None), (
@@ -327,8 +328,9 @@ class DataProcessor:
             )
 
         # ----- Normalizações ----------------------------------------------- #
-        df['_NF_NORM']     = df[col_nf].apply(normalizar_nf)
+        df['_NF_NORM']     = df[col_nf].apply(normalizar_nf) if col_nf else ""
         df['_PEDIDO_NORM'] = df[col_num_pedido].apply(self._normalizar_pedido) if col_num_pedido else ""
+        df['_CHAVE_NORM']  = df[col_chave_nf].apply(normalizar_nf)  # chave de 44 dig limpa
 
         # ----- ETAPA 1 — Filtro pelo histórico ----------------------------- #
         if not isinstance(nfs_historico, set):
@@ -338,23 +340,27 @@ class DataProcessor:
         df_descartadas_raw = df[mask_hist].copy()
         df_validas         = df[~mask_hist].copy()
 
-        # ----- ETAPA 2 — Cruzamento Sysemp por NOTA FISCAL + validação ----- #
-        # Renomeia 'Nota Fiscal' do Sysemp para '_NF_SYS_KEY' para evitar
-        # colisao com a coluna do Intelipost no merge.
+        # ----- ETAPA 2 — Cruzamento Sysemp pela CHAVE DA NF + validação ---- #
+        # Usa a 'Chave NF_sys' (saida de tratar_sysemp) como chave do merge.
+        # Re-aplica normalizar_nf para garantir 44 digitos puros (sem pontos,
+        # espacos ou caracteres invisiveis que possam quebrar o match).
         df_sysemp_lookup = (
-            df_sysemp[['Nota Fiscal', 'Pedido_sys', 'Transportadora_sys']]
+            df_sysemp[['Chave NF_sys', 'Pedido_sys', 'Transportadora_sys']]
             .copy()
-            .rename(columns={'Nota Fiscal': '_NF_SYS_KEY'})
-            .assign(Pedido_sys=lambda x: x['Pedido_sys'].apply(self._normalizar_pedido))
+            .rename(columns={'Chave NF_sys': '_CHAVE_SYS_KEY'})
+            .assign(
+                _CHAVE_SYS_KEY=lambda x: x['_CHAVE_SYS_KEY'].apply(normalizar_nf),
+                Pedido_sys=lambda x: x['Pedido_sys'].apply(self._normalizar_pedido),
+            )
         )
-        df_sysemp_lookup = df_sysemp_lookup[df_sysemp_lookup['_NF_SYS_KEY'] != ""]
-        df_sysemp_lookup = df_sysemp_lookup.drop_duplicates(subset='_NF_SYS_KEY', keep='first')
+        df_sysemp_lookup = df_sysemp_lookup[df_sysemp_lookup['_CHAVE_SYS_KEY'] != ""]
+        df_sysemp_lookup = df_sysemp_lookup.drop_duplicates(subset='_CHAVE_SYS_KEY', keep='first')
 
         df_merged = pd.merge(
             df_validas,
             df_sysemp_lookup,
-            left_on='_NF_NORM',
-            right_on='_NF_SYS_KEY',
+            left_on='_CHAVE_NORM',
+            right_on='_CHAVE_SYS_KEY',
             how='left'
         )
 
@@ -367,9 +373,9 @@ class DataProcessor:
         transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
         transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
 
-        # 'encontrado' = NF foi localizada no Sysemp (chave do merge não-NaN).
-        # _NF_SYS_KEY vazio já é filtrado antes do merge, então notna() basta.
-        encontrado = df_merged['_NF_SYS_KEY'].notna()
+        # 'encontrado' = chave da NF foi localizada no Sysemp (merge key não-NaN).
+        # _CHAVE_SYS_KEY vazio já é filtrado antes do merge, então notna() basta.
+        encontrado = df_merged['_CHAVE_SYS_KEY'].notna()
         iguais     = encontrado & (transp_inteli == transp_sys)
         diferentes = encontrado & (transp_inteli != transp_sys)
 
@@ -419,7 +425,7 @@ class DataProcessor:
             'UF':                       self._fmt_col(df_merged, col_uf).str.upper(),
             'TRANSPORTADORA':           pd.Series(transp_final, index=df_merged.index),
             'PEDIDO INTELIPOST':        self._fmt_col(df_merged, col_pedido_inte),
-            'CHAVE DA NF':              self._fmt_col(df_merged, col_chave_nf),
+            'CHAVE DA NF':              df_merged['_CHAVE_NORM'].astype(str),
             'MARKETPLACE':              self._fmt_col(df_merged, col_canal).str.upper(),
             'N° PEDIDO':                pd.Series(numero_pedido_final, index=df_merged.index).astype(str),
             'NOTA FISCAL':              df_merged['_NF_NORM'].astype(str),
@@ -451,7 +457,7 @@ class DataProcessor:
             'UF':                       self._fmt_col(df_descartadas_raw, col_uf).str.upper(),
             'TRANSPORTADORA':           transp_desc,
             'PEDIDO INTELIPOST':        self._fmt_col(df_descartadas_raw, col_pedido_inte),
-            'CHAVE DA NF':              self._fmt_col(df_descartadas_raw, col_chave_nf),
+            'CHAVE DA NF':              df_descartadas_raw['_CHAVE_NORM'].astype(str) if '_CHAVE_NORM' in df_descartadas_raw.columns else "",
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
             'N° PEDIDO':                df_descartadas_raw['_PEDIDO_NORM'].astype(str) if '_PEDIDO_NORM' in df_descartadas_raw.columns else "",
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
