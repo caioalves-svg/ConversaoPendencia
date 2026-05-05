@@ -10,7 +10,14 @@ from utils.helpers import normalizar_nf, encontrar_coluna, carregar_arquivo
 class DataProcessor:
     def __init__(self):
         self.dict_mkt_norm = {k.upper(): v for k, v in MARKETPLACES.items()}
-        self.dict_transp_norm = {k.upper(): v for k, v in CARRIERS.items()}
+        # Normaliza espacos multiplos -> espaco simples nas chaves do dict de
+        # transportadoras. Garante que "JADLOG  SERRA 18" (2 espacos),
+        # "TJB - TRANSPORTADORA  21" e similares casem com a versao canonica
+        # do dict, mesmo quando o Sysemp/Intelipost trazem espacamento
+        # inconsistente.
+        self.dict_transp_norm = {
+            ' '.join(k.upper().split()): v for k, v in CARRIERS.items()
+        }
         self.dict_ocorr_norm = {k.upper(): v for k, v in OCCURRENCES.items()}
 
     # --------------------------------------------------------------------- #
@@ -390,8 +397,17 @@ class DataProcessor:
         # Comparacao usa o dicionario CARRIERS dos dois lados.
         # .map() retorna NaN quando a chave nao existe no dict — usamos isso
         # para detectar "transp nao esta no dicionario" (status Não Localizado).
-        transp_inteli_norm = df_merged[col_transp].astype(str).str.upper().str.strip()
-        transp_sys_norm    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+        # Normaliza espacos multiplos -> espaco simples (consistente com as
+        # chaves do dict_transp_norm criado em __init__) para que variantes
+        # como "FRONTLOG  EXTREMA SDF 21" (2 espacos) casem corretamente.
+        transp_inteli_norm = (
+            df_merged[col_transp].astype(str).str.upper()
+            .str.replace(r'\s+', ' ', regex=True).str.strip()
+        )
+        transp_sys_norm = (
+            df_merged['Transportadora_sys'].astype(str).str.upper()
+            .str.replace(r'\s+', ' ', regex=True).str.strip()
+        )
 
         transp_inteli_dict = transp_inteli_norm.map(self.dict_transp_norm)
         transp_sys_dict    = transp_sys_norm.map(self.dict_transp_norm)
