@@ -388,12 +388,14 @@ class DataProcessor:
         transp_final = np.where(diferentes, transp_sys, transp_inteli)
 
         # N° PEDIDO final — VLOOKUP por NF (Intelipost x Sysemp):
-        #   1. Limpa Pedido_sys (NaN, "nan", "" -> "" padronizado).
-        #   2. Se Pedido_sys valido -> usa (resolve casos como Shopee em
-        #      que a Intelipost vem com pedido em branco).
+        #   1. Limpa Pedido_sys (NaN, "nan", "" -> "" padronizado) para
+        #      a checagem nao se confundir com strings literais 'nan'.
+        #   2. Se Pedido_sys valido -> usa (resolve Shopee, em que o
+        #      Intelipost vem com pedido em branco mas o Sysemp tem o
+        #      'Pedido Marketplace' preenchido).
         #   3. Senao, cai pro _PEDIDO_NORM da Intelipost.
-        #   4. Se ainda assim ficar vazio, usa placeholder "SEM PEDIDO"
-        #      para nao deixar a coluna em branco no relatorio entregue.
+        # Por contrato dos dados, o pedido SEMPRE estara em uma das duas
+        # fontes — nao adicionamos placeholder de fallback.
         pedido_sys_clean = (
             df_merged['Pedido_sys'].astype(str).str.strip()
             .replace({'nan': '', 'None': '', 'NaT': ''})
@@ -410,9 +412,6 @@ class DataProcessor:
             pd.Series(numero_pedido_final, index=df_merged.index).astype(str)
             .str.strip()
             .replace({'nan': '', 'None': '', 'NaT': ''})
-        )
-        serie_pedido_final = serie_pedido_final.where(
-            serie_pedido_final != '', 'SEM PEDIDO'
         )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
@@ -471,8 +470,7 @@ class DataProcessor:
             'N° PEDIDO':                (
                 df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
                 .replace({'nan': '', 'None': '', 'NaT': ''})
-                .where(lambda s: s != '', 'SEM PEDIDO')
-                if '_PEDIDO_NORM' in df_descartadas_raw.columns else "SEM PEDIDO"
+                if '_PEDIDO_NORM' in df_descartadas_raw.columns else ""
             ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
             'STATUS DA TRANSPORTADORA': "DESCARTADA - HISTÓRICO",
