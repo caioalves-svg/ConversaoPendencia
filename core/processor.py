@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.config import (
     MARKETPLACES, CARRIERS, OCCURRENCES,
     FINAL_COLUMNS, FINAL_COLUMNS_VALIDACAO
@@ -554,5 +554,17 @@ class DataProcessor:
             df_descartadas = df_descartadas[FINAL_COLUMNS_VALIDACAO]
         else:
             df_descartadas = pd.DataFrame(columns=FINAL_COLUMNS_VALIDACAO)
+
+        # ----- ETAPA 4 — Filtra DATA PREVISTA = ontem ---------------------- #
+        # Mantem apenas as linhas cuja DATA PREVISTA eh igual a (hoje - 1 dia).
+        # Se a coluna estiver com formato 'DD/MM/YYYY HH:MM:SS' (improvavel
+        # apos _so_data), o split garante que so a parte da data eh comparada.
+        ontem_str = (datetime.now() - timedelta(days=1)).strftime('%d/%m/%Y')
+        df_final = df_final[
+            df_final['DATA PREVISTA'].astype(str).str.split(' ', n=1).str[0] == ontem_str
+        ].copy()
+        df_descartadas = df_descartadas[
+            df_descartadas['DATA PREVISTA'].astype(str).str.split(' ', n=1).str[0] == ontem_str
+        ].copy()
 
         return (df_final, df_descartadas), None
