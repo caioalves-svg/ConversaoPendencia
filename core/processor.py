@@ -387,38 +387,60 @@ class DataProcessor:
                     how='left',
                 )
 
-        # Comparacao usa o dicionario CARRIERS dos dois lados para canonicalizar
-        # nomes longos do Sysemp ("JADLOG TRANSPORTES SERRA 18" -> "JADLOG"),
-        # de modo que sejam tratados como iguais quando representam a mesma
-        # transportadora real, ignorando sufixo de empresa.
+        # Comparacao usa o dicionario CARRIERS dos dois lados.
+        # .map() retorna NaN quando a chave nao existe no dict — usamos isso
+        # para detectar "transp nao esta no dicionario" (status Não Localizado).
         transp_inteli_norm = df_merged[col_transp].astype(str).str.upper().str.strip()
         transp_sys_norm    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
 
-        transp_inteli_canon = transp_inteli_norm.map(self.dict_transp_norm).fillna(transp_inteli_norm)
-        transp_sys_canon    = transp_sys_norm.map(self.dict_transp_norm).fillna(transp_sys_norm)
+        transp_inteli_dict = transp_inteli_norm.map(self.dict_transp_norm)
+        transp_sys_dict    = transp_sys_norm.map(self.dict_transp_norm)
 
+        inteli_in_dict = transp_inteli_dict.notna()
+        sys_in_dict    = transp_sys_dict.notna()
+
+        # Canonical para a comparacao (usa raw upper se nao tiver no dict).
+        transp_inteli_canon = transp_inteli_dict.fillna(transp_inteli_norm)
+        transp_sys_canon    = transp_sys_dict.fillna(transp_sys_norm)
+
+        # Valores brutos (preservam capitalizacao original) — usados quando
+        # a transportadora nao esta no dicionario e queremos manter como veio.
+        transp_inteli_out = df_merged[col_transp].astype(str).str.strip()
+        transp_sys_out    = df_merged['Transportadora_sys'].astype(str).str.strip()
+
+        # 'encontrado' = NF foi localizada no Sysemp (Transportadora_sys valida).
         encontrado = (
             df_merged['Transportadora_sys'].notna()
             & (transp_sys_norm != '')
             & (transp_sys_norm != 'NAN')
         )
-        # Comparacao APOS canonicalizacao via dicionario.
-        iguais     = encontrado & (transp_inteli_canon == transp_sys_canon)
-        diferentes = encontrado & (transp_inteli_canon != transp_sys_canon)
 
-        # Status final — três estados:
-        #   match + iguais (apos CARRIERS dict)     -> 'Verdadeiro'
-        #   match + diferentes (apos CARRIERS dict) -> 'Falso'
-        #   sem match (ou Sysemp invalido)          -> 'Não localizada'
+        # Ambas transportadoras (Intelipost E Sysemp) FORA do dicionario.
+        ambos_fora_dict = encontrado & (~inteli_in_dict) & (~sys_in_dict)
+
+        # Comparacao apos canonicalizacao (so significativa quando pelo menos
+        # um lado esta no dicionario).
+        iguais     = encontrado & ~ambos_fora_dict & (transp_inteli_canon == transp_sys_canon)
+        diferentes = encontrado & ~ambos_fora_dict & (transp_inteli_canon != transp_sys_canon)
+
+        # Status final:
+        #   transportadora canonicas iguais (apos dict)     -> 'Verdadeiro'
+        #   transportadora canonicas diferentes (apos dict) -> 'Falso'
+        #   ambas fora do dicionario (ou NF nao casou)      -> 'Não Localizado'
         status = np.where(
-            ~encontrado, "Não localizada",
+            (~encontrado) | ambos_fora_dict, "Não Localizado",
             np.where(iguais, "Verdadeiro", "Falso")
         )
 
-        # Transportadora final usa o valor CANONICO do dicionario CARRIERS:
-        #   diferentes -> Sysemp canonical (ex: "JADLOG TRANSPORTES SERRA 18" -> "JADLOG")
-        #   demais     -> Intelipost canonical
-        transp_final = np.where(diferentes, transp_sys_canon, transp_inteli_canon)
+        # Transportadora final:
+        #   ambos_fora_dict -> Sysemp RAW (mantem a transportadora do Sysemp)
+        #   diferentes      -> Sysemp canonical (do dicionario)
+        #   demais          -> Intelipost canonical (do dicionario)
+        transp_final = np.select(
+            [ambos_fora_dict, diferentes],
+            [transp_sys_out,  transp_sys_canon],
+            default=transp_inteli_canon,
+        )
 
         # N° PEDIDO final — VLOOKUP por NF, com cadeia de fallback:
         #   1. Sysemp BRUTO 'Pedido Marketplace' (sem filtro de empresa —
