@@ -387,17 +387,32 @@ class DataProcessor:
         #   demais     -> Intelipost canonical
         transp_final = np.where(diferentes, transp_sys, transp_inteli)
 
-        # N° PEDIDO final: prioriza o pedido do Sysemp quando existe e nao
-        # eh vazio; senao cai pro pedido do Intelipost (que pode ser "" se
-        # col_num_pedido nao foi localizado no arquivo de origem).
-        pedido_sys_valido = (
-            df_merged['Pedido_sys'].notna()
-            & (df_merged['Pedido_sys'].astype(str) != "")
+        # N° PEDIDO final — VLOOKUP por NF (Intelipost x Sysemp):
+        #   1. Limpa Pedido_sys (NaN, "nan", "" -> "" padronizado).
+        #   2. Se Pedido_sys valido -> usa (resolve casos como Shopee em
+        #      que a Intelipost vem com pedido em branco).
+        #   3. Senao, cai pro _PEDIDO_NORM da Intelipost.
+        #   4. Se ainda assim ficar vazio, usa placeholder "SEM PEDIDO"
+        #      para nao deixar a coluna em branco no relatorio entregue.
+        pedido_sys_clean = (
+            df_merged['Pedido_sys'].astype(str).str.strip()
+            .replace({'nan': '', 'None': '', 'NaT': ''})
         )
+        pedido_sys_valido = pedido_sys_clean != ''
+
         numero_pedido_final = np.where(
             pedido_sys_valido,
-            df_merged['Pedido_sys'],
-            df_merged['_PEDIDO_NORM'],
+            pedido_sys_clean,
+            df_merged['_PEDIDO_NORM'].astype(str),
+        )
+
+        serie_pedido_final = (
+            pd.Series(numero_pedido_final, index=df_merged.index).astype(str)
+            .str.strip()
+            .replace({'nan': '', 'None': '', 'NaT': ''})
+        )
+        serie_pedido_final = serie_pedido_final.where(
+            serie_pedido_final != '', 'SEM PEDIDO'
         )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
@@ -421,7 +436,7 @@ class DataProcessor:
             'PEDIDO INTELIPOST':        self._fmt_col(df_merged, col_pedido_inte),
             'CHAVE DA NF':              self._fmt_col(df_merged, col_chave_nf),
             'MARKETPLACE':              self._fmt_col(df_merged, col_canal).str.upper(),
-            'N° PEDIDO':                pd.Series(numero_pedido_final, index=df_merged.index).astype(str),
+            'N° PEDIDO':                serie_pedido_final,
             'NOTA FISCAL':              df_merged['_NF_NORM'].astype(str),
             'STATUS DA TRANSPORTADORA': pd.Series(status, index=df_merged.index),
         })
@@ -453,7 +468,12 @@ class DataProcessor:
             'PEDIDO INTELIPOST':        self._fmt_col(df_descartadas_raw, col_pedido_inte),
             'CHAVE DA NF':              self._fmt_col(df_descartadas_raw, col_chave_nf),
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
-            'N° PEDIDO':                df_descartadas_raw['_PEDIDO_NORM'].astype(str) if '_PEDIDO_NORM' in df_descartadas_raw.columns else "",
+            'N° PEDIDO':                (
+                df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
+                .replace({'nan': '', 'None': '', 'NaT': ''})
+                .where(lambda s: s != '', 'SEM PEDIDO')
+                if '_PEDIDO_NORM' in df_descartadas_raw.columns else "SEM PEDIDO"
+            ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
             'STATUS DA TRANSPORTADORA': "DESCARTADA - HISTÓRICO",
         })
