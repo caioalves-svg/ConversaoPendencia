@@ -442,12 +442,13 @@ class DataProcessor:
             default=transp_inteli_canon,
         )
 
-        # N° PEDIDO final — VLOOKUP por NF, com cadeia de fallback:
+        # N° PEDIDO final — VLOOKUP por NF, com cadeia de fallback que
+        # garante que NENHUMA linha fique sem informação:
         #   1. Sysemp BRUTO 'Pedido Marketplace' (sem filtro de empresa —
         #      cobre B2B/TIKTOK direto que ficam fora de [16,18,19,21])
         #   2. Sysemp FILTRADO 'Pedido_sys' (do merge principal)
         #   3. Intelipost 'marketplace' (_PEDIDO_NORM)
-        # Se nenhum dos 3 tiver valor, o campo fica em branco.
+        #   4. 'NÃO INFORMADO' (trava anti-branco final)
         _NULOS = ['nan', 'NaN', 'None', '<NA>', '']
         if '_PEDIDO_FULL' in df_merged.columns:
             pedido_sys_full = (
@@ -465,7 +466,7 @@ class DataProcessor:
             pedido_sys_full
             .fillna(pedido_sys_filt)
             .fillna(pedido_int)
-            .fillna('')
+            .fillna('NÃO INFORMADO')
         )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
@@ -523,8 +524,9 @@ class DataProcessor:
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
             'N° PEDIDO':                (
                 df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
-                .replace(['nan', 'NaN', 'None', '<NA>', ''], '')
-                if '_PEDIDO_NORM' in df_descartadas_raw.columns else ''
+                .replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
+                .fillna('NÃO INFORMADO')
+                if '_PEDIDO_NORM' in df_descartadas_raw.columns else 'NÃO INFORMADO'
             ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
             'STATUS DA TRANSPORTADORA': "DESCARTADA - HISTÓRICO",
