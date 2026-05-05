@@ -85,6 +85,11 @@ class DataProcessor:
         upper = serie.astype(str).str.upper().str.strip()
         return upper.map(dicionario).fillna(upper)
 
+    @staticmethod
+    def _so_data(serie):
+        """Mantém apenas a parte da data, descartando hora se houver (split no 1º espaço)."""
+        return serie.astype(str).str.split(' ', n=1).str[0]
+
     # --------------------------------------------------------------------- #
     # Carregamento e tratamento Sysemp (compartilhado entre módulos)
     # --------------------------------------------------------------------- #
@@ -267,11 +272,14 @@ class DataProcessor:
         ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido.
                    Lado Intelipost: coluna 'marketplace'.
                    Lado Sysemp:     coluna 'Pedido Marketplace'.
-                   Compara transportadora Intelipost x transportadora Sysemp:
-                       iguais     -> mantém Intelipost, STATUS = 'Verdadeiro'
-                       diferentes -> usa Sysemp,        STATUS = 'Falso'
-                       sem match  -> mantém Intelipost, STATUS = 'Não Localizado'
+                   Compara transportadora Intelipost x transportadora Sysemp
+                   (texto bruto, case-insensitive — sem dicionário CARRIERS):
+                       match + iguais     -> usa Sysemp,       STATUS = 'Verdadeiro'
+                       match + diferentes -> usa Sysemp,       STATUS = 'Falso'
+                       sem match          -> mantém Intelipost, STATUS = 'Não Localizado'
         ETAPA 3 — Monta planilha final na ordem fixa de FINAL_COLUMNS_VALIDACAO.
+                   DATA PEDIDO e DATA PREVISTA são exportadas SEM hora.
+                   Detecção de SHOPEE é por substring (canal contém 'SHOPEE').
                    DATA PREVISTA usa coluna específica para SHOPEE
                    ('Previsão Entrega Transp. Original'); demais canais usam
                    'Previsão Entrega Cliente Original'.
@@ -343,22 +351,21 @@ class DataProcessor:
             how='left'
         )
 
-        # Aplica o dicionario CARRIERS dos dois lados (canonicaliza nomes longos
-        # do Sysemp como "JADLOG TRANSPORTES SERRA 18" -> "JADLOG"). Assim a
-        # comparacao reflete a transportadora real, e nao o sufixo da empresa.
-        transp_inteli_raw = df_merged[col_transp].astype(str).str.upper().str.strip()
-        transp_sys_raw    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+        # Comparacao de transportadora em texto bruto (case-insensitive),
+        # sem aplicar o dicionario CARRIERS — espelha a regra do JS.
+        transp_inteli_cmp = df_merged[col_transp].astype(str).str.upper().str.strip()
+        transp_sys_cmp    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
 
-        transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
-        transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
+        # Valores brutos (preservando capitalizacao original) para a saida.
+        transp_inteli_out = df_merged[col_transp].astype(str).str.strip()
+        transp_sys_out    = df_merged['Transportadora_sys'].astype(str).str.strip()
 
         encontrado = (
             df_merged['Transportadora_sys'].notna()
-            & (transp_sys_raw != "")
-            & (transp_sys_raw != "NAN")
+            & (transp_sys_cmp != "")
+            & (transp_sys_cmp != "NAN")
         )
-        iguais     = encontrado & (transp_inteli == transp_sys)
-        diferentes = encontrado & (transp_inteli != transp_sys)
+        iguais     = encontrado & (transp_inteli_cmp == transp_sys_cmp)
 
         # Status final — três estados:
         #   match com transportadoras iguais     -> 'Verdadeiro'
@@ -369,27 +376,26 @@ class DataProcessor:
             np.where(iguais, "Verdadeiro", "Falso")
         )
 
-        # Transportadora final: usa o valor canonico (do dicionario)
-        transp_final = np.where(
-            diferentes,
-            transp_sys,
-            transp_inteli,
-        )
+        # Transportadora final: SEMPRE usa Sysemp quando ha match
+        # (mesmo se igual a Intelipost); sem match mantem Intelipost.
+        transp_final = np.where(encontrado, transp_sys_out, transp_inteli_out)
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
 
         # DATA PREVISTA por canal: SHOPEE usa 'Previsão Entrega Transp. Original';
         # demais canais usam 'Previsão Entrega Cliente Original'.
+        # Detecção de Shopee é por substring (canal contém 'SHOPEE').
         canal_upper = self._fmt_col(df_merged, col_canal).str.upper()
+        eh_shopee   = canal_upper.str.contains('SHOPEE', na=False, regex=False)
         previsao_geral  = self._fmt_data_br(df_merged, col_previsao)
         previsao_shopee = self._fmt_data_br(df_merged, col_previsao_shopee)
-        data_prevista = previsao_geral.where(canal_upper != 'SHOPEE', previsao_shopee)
+        data_prevista = previsao_geral.where(~eh_shopee, previsao_shopee)
 
         df_final = pd.DataFrame({
             'DIA DA TRATATIVA':         hoje,
-            'DATA PEDIDO':              self._fmt_data_br(df_merged, col_data_criacao),
-            'DATA PREVISTA':            data_prevista,
+            'DATA PEDIDO':              self._so_data(self._fmt_data_br(df_merged, col_data_criacao)),
+            'DATA PREVISTA':            self._so_data(data_prevista),
             'UF':                       self._fmt_col(df_merged, col_uf).str.upper(),
             'TRANSPORTADORA':           pd.Series(transp_final, index=df_merged.index),
             'PEDIDO INTELIPOST':        self._fmt_col(df_merged, col_pedido_inte),
@@ -413,14 +419,15 @@ class DataProcessor:
             self.dict_transp_norm,
         )
         canal_desc = self._fmt_col(df_descartadas_raw, col_canal).str.upper()
+        eh_shopee_desc = canal_desc.str.contains('SHOPEE', na=False, regex=False)
         previsao_desc_geral  = self._fmt_data_br(df_descartadas_raw, col_previsao)
         previsao_desc_shopee = self._fmt_data_br(df_descartadas_raw, col_previsao_shopee)
-        data_prev_desc = previsao_desc_geral.where(canal_desc != 'SHOPEE', previsao_desc_shopee)
+        data_prev_desc = previsao_desc_geral.where(~eh_shopee_desc, previsao_desc_shopee)
 
         df_descartadas = pd.DataFrame({
             'DIA DA TRATATIVA':         hoje,
-            'DATA PEDIDO':              self._fmt_data_br(df_descartadas_raw, col_data_criacao),
-            'DATA PREVISTA':            data_prev_desc,
+            'DATA PEDIDO':              self._so_data(self._fmt_data_br(df_descartadas_raw, col_data_criacao)),
+            'DATA PREVISTA':            self._so_data(data_prev_desc),
             'UF':                       self._fmt_col(df_descartadas_raw, col_uf).str.upper(),
             'TRANSPORTADORA':           transp_desc,
             'PEDIDO INTELIPOST':        self._fmt_col(df_descartadas_raw, col_pedido_inte),
