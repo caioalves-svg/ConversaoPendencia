@@ -445,6 +445,14 @@ class DataProcessor:
 
         serie_pedido_final = s_pedido_sys.where(s_pedido_sys != '', s_pedido_mkt)
 
+        # Trava anti-branco: se mesmo apos os dois lookups o pedido ficou
+        # vazio (caso raro — ex.: NF que nao esta no Sysemp E o Intelipost
+        # tambem nao tem 'marketplace' preenchido), usa placeholder pra
+        # garantir que o relatorio entregue nunca tenha celula em branco.
+        serie_pedido_final = serie_pedido_final.replace(
+            ['', 'nan', 'NaN', 'None', 'NaT'], 'NÃO INFORMADO'
+        )
+
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
 
@@ -501,7 +509,8 @@ class DataProcessor:
             'N° PEDIDO':                (
                 df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
                 .replace({'nan': '', 'None': '', 'NaT': ''})
-                if '_PEDIDO_NORM' in df_descartadas_raw.columns else ""
+                .replace('', 'NÃO INFORMADO')
+                if '_PEDIDO_NORM' in df_descartadas_raw.columns else 'NÃO INFORMADO'
             ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
             'STATUS DA TRANSPORTADORA': "DESCARTADA - HISTÓRICO",
