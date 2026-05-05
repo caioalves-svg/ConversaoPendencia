@@ -397,10 +397,6 @@ class DataProcessor:
         transp_inteli_canon = transp_inteli_norm.map(self.dict_transp_norm).fillna(transp_inteli_norm)
         transp_sys_canon    = transp_sys_norm.map(self.dict_transp_norm).fillna(transp_sys_norm)
 
-        # Valores brutos (preservam capitalizacao original) para a saida.
-        transp_inteli_out  = df_merged[col_transp].astype(str).str.strip()
-        transp_sys_out     = df_merged['Transportadora_sys'].astype(str).str.strip()
-
         encontrado = (
             df_merged['Transportadora_sys'].notna()
             & (transp_sys_norm != '')
@@ -419,8 +415,10 @@ class DataProcessor:
             np.where(iguais, "Verdadeiro", "Falso")
         )
 
-        # Transportadora final: Sysemp raw quando diferentes; Intelipost raw caso contrario.
-        transp_final = np.where(diferentes, transp_sys_out, transp_inteli_out)
+        # Transportadora final usa o valor CANONICO do dicionario CARRIERS:
+        #   diferentes -> Sysemp canonical (ex: "JADLOG TRANSPORTES SERRA 18" -> "JADLOG")
+        #   demais     -> Intelipost canonical
+        transp_final = np.where(diferentes, transp_sys_canon, transp_inteli_canon)
 
         # N° PEDIDO final — VLOOKUP por NF, com cadeia de fallback:
         #   1. Sysemp BRUTO 'Pedido Marketplace' (sem filtro de empresa —
