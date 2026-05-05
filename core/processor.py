@@ -264,11 +264,13 @@ class DataProcessor:
 
         ETAPA 1 — Cruza Intelipost x Histórico/NFs em tratamento por 'Nota Fiscal'.
                    Linhas presentes no histórico são DESCARTADAS.
-        ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido (coluna 'Pedido Marketplace').
+        ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido.
+                   Lado Intelipost: coluna 'marketplace'.
+                   Lado Sysemp:     coluna 'Pedido Marketplace'.
                    Compara transportadora Intelipost x transportadora Sysemp:
-                       diferentes -> usa Sysemp,       STATUS = 'Falso'
-                       iguais ou
-                       sem match  -> mantém Intelipost, STATUS = 'Verdadeiro'
+                       iguais     -> mantém Intelipost, STATUS = 'Verdadeiro'
+                       diferentes -> usa Sysemp,        STATUS = 'Falso'
+                       sem match  -> mantém Intelipost, STATUS = 'Não Localizado'
         ETAPA 3 — Monta planilha final na ordem fixa de FINAL_COLUMNS_VALIDACAO.
                    DATA PREVISTA usa coluna específica para SHOPEE
                    ('Previsão Entrega Transp. Original'); demais canais usam
@@ -298,13 +300,13 @@ class DataProcessor:
         col_pedido_inte  = encontrar_coluna(df, ['Pedido', 'Pedido Intelipost', 'Pedido ID'])
         col_chave_nf     = encontrar_coluna(df, ['Chave da Nota', 'Chave NF', 'Chave da NF', 'Chave NFe'])
         col_canal        = encontrar_coluna(df, ['Canal de Vendas', 'Canal de Venda'])
-        col_num_pedido   = encontrar_coluna(df, ['Pedido Marketplace', 'marketplace', 'Marketplace', 'N° Pedido', 'Nº Pedido'])
+        col_num_pedido   = encontrar_coluna(df, ['marketplace', 'Marketplace', 'Pedido Marketplace', 'N° Pedido', 'Nº Pedido'])
         col_nf           = encontrar_coluna(df, ['Nota Fiscal', 'NF', 'Numero NF'])
 
         # ----- Validações obrigatórias ------------------------------------- #
         faltando = []
         if not col_nf:           faltando.append("Nota Fiscal")
-        if not col_num_pedido:   faltando.append("Pedido Marketplace (N° Pedido)")
+        if not col_num_pedido:   faltando.append("marketplace (N° Pedido)")
         if not col_transp:       faltando.append("Transportadora")
         if faltando:
             return (None, None), (
@@ -358,9 +360,14 @@ class DataProcessor:
         iguais     = encontrado & (transp_inteli == transp_sys)
         diferentes = encontrado & (transp_inteli != transp_sys)
 
-        # Status final — regra binária (Verdadeiro/Falso).
-        # Sem match no Sysemp mantém transportadora da Intelipost e marca Verdadeiro.
-        status = np.where(diferentes, "Falso", "Verdadeiro")
+        # Status final — três estados:
+        #   match com transportadoras iguais     -> 'Verdadeiro'
+        #   match com transportadoras diferentes -> 'Falso'
+        #   sem match no Sysemp                  -> 'Não Localizado'
+        status = np.where(
+            ~encontrado, "Não Localizado",
+            np.where(iguais, "Verdadeiro", "Falso")
+        )
 
         # Transportadora final: usa o valor canonico (do dicionario)
         transp_final = np.where(
