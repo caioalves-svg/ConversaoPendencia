@@ -362,11 +362,9 @@ class DataProcessor:
         transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
         transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
 
-        encontrado = (
-            df_merged['Transportadora_sys'].notna()
-            & (transp_sys_raw != "")
-            & (transp_sys_raw != "NAN")
-        )
+        # 'encontrado' = pedido foi localizado no Sysemp (chave do merge não-NaN).
+        # Pedido_sys vazio já é filtrado antes do merge, então notna() basta.
+        encontrado = df_merged['Pedido_sys'].notna()
         iguais     = encontrado & (transp_inteli == transp_sys)
         diferentes = encontrado & (transp_inteli != transp_sys)
 
@@ -383,6 +381,15 @@ class DataProcessor:
         #   diferentes -> Sysemp canonical
         #   demais     -> Intelipost canonical
         transp_final = np.where(diferentes, transp_sys, transp_inteli)
+
+        # N° PEDIDO final: prioriza o valor vindo do Sysemp quando ha match,
+        # mantem o do Intelipost quando nao. Funcionalmente equivalente
+        # (merge eh por igualdade), mas deixa a origem explicita.
+        numero_pedido_final = np.where(
+            encontrado,
+            df_merged['Pedido_sys'],
+            df_merged['_PEDIDO_NORM'],
+        )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
@@ -405,7 +412,7 @@ class DataProcessor:
             'PEDIDO INTELIPOST':        self._fmt_col(df_merged, col_pedido_inte),
             'CHAVE DA NF':              self._fmt_col(df_merged, col_chave_nf),
             'MARKETPLACE':              self._fmt_col(df_merged, col_canal).str.upper(),
-            'N° PEDIDO':                df_merged['_PEDIDO_NORM'].astype(str),
+            'N° PEDIDO':                pd.Series(numero_pedido_final, index=df_merged.index).astype(str),
             'NOTA FISCAL':              df_merged['_NF_NORM'].astype(str),
             'STATUS DA TRANSPORTADORA': pd.Series(status, index=df_merged.index),
         })
