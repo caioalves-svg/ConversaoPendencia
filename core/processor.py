@@ -482,7 +482,7 @@ class DataProcessor:
             pedido_sys_full
             .fillna(pedido_sys_filt)
             .fillna(pedido_int)
-            .fillna('NÃO INFORMADO')
+            .fillna('')
         )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
@@ -540,9 +540,8 @@ class DataProcessor:
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
             'N° PEDIDO':                (
                 df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
-                .replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
-                .fillna('NÃO INFORMADO')
-                if '_PEDIDO_NORM' in df_descartadas_raw.columns else 'NÃO INFORMADO'
+                .replace(['nan', 'NaN', 'None', '<NA>', ''], '')
+                if '_PEDIDO_NORM' in df_descartadas_raw.columns else ''
             ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
             'STATUS DA TRANSPORTADORA': "DESCARTADA - HISTÓRICO",
