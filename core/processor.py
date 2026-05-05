@@ -269,9 +269,10 @@ class DataProcessor:
 
         ETAPA 1 — Cruza Intelipost x Histórico/NFs em tratamento por 'Nota Fiscal'.
                    Linhas presentes no histórico são DESCARTADAS.
-        ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido.
-                   Lado Intelipost: coluna 'marketplace'.
-                   Lado Sysemp:     coluna 'Pedido Marketplace'.
+        ETAPA 2 — Cruza Intelipost x Sysemp pela NOTA FISCAL (chave mais
+                   estável que o nº de pedido). N° PEDIDO de saída é puxado
+                   do Sysemp ('Pedido Marketplace') quando disponível, com
+                   fallback para o pedido normalizado da Intelipost.
                    Compara transportadora Intelipost x transportadora Sysemp
                    APÓS canonicalização pelo dicionário CARRIERS — assim
                    "JADLOG TRANSPORTES SERRA 18" e "JADLOG" são tratados
@@ -314,9 +315,10 @@ class DataProcessor:
         col_nf           = encontrar_coluna(df, ['Nota Fiscal', 'NF', 'Numero NF'])
 
         # ----- Validações obrigatórias ------------------------------------- #
+        # col_num_pedido nao eh mais obrigatorio: o merge eh por NF.
+        # Se ausente, N° PEDIDO de saida usa apenas o que vier do Sysemp.
         faltando = []
         if not col_nf:           faltando.append("Nota Fiscal")
-        if not col_num_pedido:   faltando.append("marketplace (N° Pedido)")
         if not col_transp:       faltando.append("Transportadora")
         if faltando:
             return (None, None), (
@@ -326,7 +328,7 @@ class DataProcessor:
 
         # ----- Normalizações ----------------------------------------------- #
         df['_NF_NORM']     = df[col_nf].apply(normalizar_nf)
-        df['_PEDIDO_NORM'] = df[col_num_pedido].apply(self._normalizar_pedido)
+        df['_PEDIDO_NORM'] = df[col_num_pedido].apply(self._normalizar_pedido) if col_num_pedido else ""
 
         # ----- ETAPA 1 — Filtro pelo histórico ----------------------------- #
         if not isinstance(nfs_historico, set):
@@ -336,20 +338,23 @@ class DataProcessor:
         df_descartadas_raw = df[mask_hist].copy()
         df_validas         = df[~mask_hist].copy()
 
-        # ----- ETAPA 2 — Cruzamento Sysemp por nº pedido + validação ------- #
+        # ----- ETAPA 2 — Cruzamento Sysemp por NOTA FISCAL + validação ----- #
+        # Renomeia 'Nota Fiscal' do Sysemp para '_NF_SYS_KEY' para evitar
+        # colisao com a coluna do Intelipost no merge.
         df_sysemp_lookup = (
-            df_sysemp[['Pedido_sys', 'Transportadora_sys']]
+            df_sysemp[['Nota Fiscal', 'Pedido_sys', 'Transportadora_sys']]
             .copy()
+            .rename(columns={'Nota Fiscal': '_NF_SYS_KEY'})
             .assign(Pedido_sys=lambda x: x['Pedido_sys'].apply(self._normalizar_pedido))
         )
-        df_sysemp_lookup = df_sysemp_lookup[df_sysemp_lookup['Pedido_sys'] != ""]
-        df_sysemp_lookup = df_sysemp_lookup.drop_duplicates(subset='Pedido_sys', keep='first')
+        df_sysemp_lookup = df_sysemp_lookup[df_sysemp_lookup['_NF_SYS_KEY'] != ""]
+        df_sysemp_lookup = df_sysemp_lookup.drop_duplicates(subset='_NF_SYS_KEY', keep='first')
 
         df_merged = pd.merge(
             df_validas,
             df_sysemp_lookup,
-            left_on='_PEDIDO_NORM',
-            right_on='Pedido_sys',
+            left_on='_NF_NORM',
+            right_on='_NF_SYS_KEY',
             how='left'
         )
 
@@ -362,9 +367,9 @@ class DataProcessor:
         transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
         transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
 
-        # 'encontrado' = pedido foi localizado no Sysemp (chave do merge não-NaN).
-        # Pedido_sys vazio já é filtrado antes do merge, então notna() basta.
-        encontrado = df_merged['Pedido_sys'].notna()
+        # 'encontrado' = NF foi localizada no Sysemp (chave do merge não-NaN).
+        # _NF_SYS_KEY vazio já é filtrado antes do merge, então notna() basta.
+        encontrado = df_merged['_NF_SYS_KEY'].notna()
         iguais     = encontrado & (transp_inteli == transp_sys)
         diferentes = encontrado & (transp_inteli != transp_sys)
 
@@ -382,11 +387,15 @@ class DataProcessor:
         #   demais     -> Intelipost canonical
         transp_final = np.where(diferentes, transp_sys, transp_inteli)
 
-        # N° PEDIDO final: prioriza o valor vindo do Sysemp quando ha match,
-        # mantem o do Intelipost quando nao. Funcionalmente equivalente
-        # (merge eh por igualdade), mas deixa a origem explicita.
+        # N° PEDIDO final: prioriza o pedido do Sysemp quando existe e nao
+        # eh vazio; senao cai pro pedido do Intelipost (que pode ser "" se
+        # col_num_pedido nao foi localizado no arquivo de origem).
+        pedido_sys_valido = (
+            df_merged['Pedido_sys'].notna()
+            & (df_merged['Pedido_sys'].astype(str) != "")
+        )
         numero_pedido_final = np.where(
-            encontrado,
+            pedido_sys_valido,
             df_merged['Pedido_sys'],
             df_merged['_PEDIDO_NORM'],
         )

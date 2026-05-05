@@ -1,14 +1,20 @@
 import pandas as pd
+import re
 import streamlit as st
 
 def normalizar_nf(valor):
-    """Padroniza o formato da Nota Fiscal para string limpa."""
+    """Padroniza a Nota Fiscal extraindo apenas dígitos.
+
+    Strippa pontos, vírgulas, espaços e qualquer outro caractere não-numérico,
+    garantindo que "364.982," (Sysemp) e "364982" (Intelipost) casem no merge.
+    Trata também o sufixo float ".0" comum quando pandas lê a coluna como
+    numérica antes de converter para string.
+    """
     if pd.isna(valor): return ""
     s = str(valor).strip()
     if s.lower() == 'nan': return ""
-    if s.endswith('.0'): s = s.replace('.0', '')
-    if ',' in s: s = s.split(',')[0]
-    return s
+    if s.endswith('.0'): s = s[:-2]
+    return re.sub(r'\D', '', s)
 
 def carregar_arquivo(uploaded_file):
     """Carrega arquivos CSV ou Excel lidando com diferentes encodings.
