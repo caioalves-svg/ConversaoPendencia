@@ -358,10 +358,15 @@ class DataProcessor:
             how='left'
         )
 
-        # Comparacao em texto bruto (case-insensitive), sem dicionario CARRIERS.
-        # 'encontrado' = Transportadora_sys eh valida (notna E nao vazia E nao 'NAN').
+        # Comparacao usa o dicionario CARRIERS dos dois lados para canonicalizar
+        # nomes longos do Sysemp ("JADLOG TRANSPORTES SERRA 18" -> "JADLOG"),
+        # de modo que sejam tratados como iguais quando representam a mesma
+        # transportadora real, ignorando sufixo de empresa.
         transp_inteli_norm = df_merged[col_transp].astype(str).str.upper().str.strip()
         transp_sys_norm    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+
+        transp_inteli_canon = transp_inteli_norm.map(self.dict_transp_norm).fillna(transp_inteli_norm)
+        transp_sys_canon    = transp_sys_norm.map(self.dict_transp_norm).fillna(transp_sys_norm)
 
         # Valores brutos (preservam capitalizacao original) para a saida.
         transp_inteli_out  = df_merged[col_transp].astype(str).str.strip()
@@ -372,13 +377,14 @@ class DataProcessor:
             & (transp_sys_norm != '')
             & (transp_sys_norm != 'NAN')
         )
-        iguais     = encontrado & (transp_inteli_norm == transp_sys_norm)
-        diferentes = encontrado & (transp_inteli_norm != transp_sys_norm)
+        # Comparacao APOS canonicalizacao via dicionario.
+        iguais     = encontrado & (transp_inteli_canon == transp_sys_canon)
+        diferentes = encontrado & (transp_inteli_canon != transp_sys_canon)
 
         # Status final — três estados:
-        #   match com transportadoras iguais     -> 'Verdadeiro'
-        #   match com transportadoras diferentes -> 'Falso'
-        #   sem match (ou Sysemp invalido)       -> 'Não localizada'
+        #   match + iguais (apos CARRIERS dict)     -> 'Verdadeiro'
+        #   match + diferentes (apos CARRIERS dict) -> 'Falso'
+        #   sem match (ou Sysemp invalido)          -> 'Não localizada'
         status = np.where(
             ~encontrado, "Não localizada",
             np.where(iguais, "Verdadeiro", "Falso")
