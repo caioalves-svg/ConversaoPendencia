@@ -266,10 +266,13 @@ class DataProcessor:
                    Linhas presentes no histórico são DESCARTADAS.
         ETAPA 2 — Cruza Intelipost x Sysemp pelo nº de pedido (coluna 'marketplace').
                    Compara transportadora Intelipost x transportadora Sysemp:
-                       iguais   -> mantém Intelipost,  STATUS = 'Verdadeiro'
-                       diferent -> usa Sysemp,         STATUS = 'Falso'
-                       sem match-> mantém Intelipost,  STATUS = 'Não Localizado'
+                       diferentes -> usa Sysemp,       STATUS = 'Falso'
+                       iguais ou
+                       sem match  -> mantém Intelipost, STATUS = 'Verdadeiro'
         ETAPA 3 — Monta planilha final na ordem fixa de FINAL_COLUMNS_VALIDACAO.
+                   DATA PREVISTA usa coluna específica para SHOPEE
+                   ('Previsão Entrega Transp. Original'); demais canais usam
+                   'Previsão Entrega Cliente Original'.
 
         Retorno: ((df_final, df_descartadas), erro_str_ou_None)
         """
@@ -285,6 +288,10 @@ class DataProcessor:
         col_previsao     = encontrar_coluna(df, [
             'Previsão Entrega Cliente Original', 'Previsao Entrega Cliente Original',
             'Previsão Entrega', 'Previsao Entrega', 'Data Prevista'
+        ])
+        col_previsao_shopee = encontrar_coluna(df, [
+            'Previsão Entrega Transp. Original', 'Previsao Entrega Transp. Original',
+            'Previsão Entrega Transp Original', 'Previsao Entrega Transp Original',
         ])
         col_uf           = encontrar_coluna(df, ['UF', 'Estado'])
         col_transp       = encontrar_coluna(df, ['Transportadora', 'Transp'])
@@ -351,11 +358,9 @@ class DataProcessor:
         iguais     = encontrado & (transp_inteli == transp_sys)
         diferentes = encontrado & (transp_inteli != transp_sys)
 
-        # Status final
-        status = np.where(
-            ~encontrado, "Não Localizado",
-            np.where(iguais, "Verdadeiro", "Falso")
-        )
+        # Status final — regra binária (Verdadeiro/Falso).
+        # Sem match no Sysemp mantém transportadora da Intelipost e marca Verdadeiro.
+        status = np.where(diferentes, "Falso", "Verdadeiro")
 
         # Transportadora final: usa o valor canonico (do dicionario)
         transp_final = np.where(
@@ -367,10 +372,17 @@ class DataProcessor:
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
 
+        # DATA PREVISTA por canal: SHOPEE usa 'Previsão Entrega Transp. Original';
+        # demais canais usam 'Previsão Entrega Cliente Original'.
+        canal_upper = self._fmt_col(df_merged, col_canal).str.upper()
+        previsao_geral  = self._fmt_data_br(df_merged, col_previsao)
+        previsao_shopee = self._fmt_data_br(df_merged, col_previsao_shopee)
+        data_prevista = previsao_geral.where(canal_upper != 'SHOPEE', previsao_shopee)
+
         df_final = pd.DataFrame({
             'DIA DA TRATATIVA':         hoje,
             'DATA PEDIDO':              self._fmt_data_br(df_merged, col_data_criacao),
-            'DATA PREVISTA':            self._fmt_data_br(df_merged, col_previsao),
+            'DATA PREVISTA':            data_prevista,
             'UF':                       self._fmt_col(df_merged, col_uf).str.upper(),
             'TRANSPORTADORA':           pd.Series(transp_final, index=df_merged.index),
             'PEDIDO INTELIPOST':        self._fmt_col(df_merged, col_pedido_inte),
@@ -393,10 +405,15 @@ class DataProcessor:
             self._fmt_col(df_descartadas_raw, col_transp),
             self.dict_transp_norm,
         )
+        canal_desc = self._fmt_col(df_descartadas_raw, col_canal).str.upper()
+        previsao_desc_geral  = self._fmt_data_br(df_descartadas_raw, col_previsao)
+        previsao_desc_shopee = self._fmt_data_br(df_descartadas_raw, col_previsao_shopee)
+        data_prev_desc = previsao_desc_geral.where(canal_desc != 'SHOPEE', previsao_desc_shopee)
+
         df_descartadas = pd.DataFrame({
             'DIA DA TRATATIVA':         hoje,
             'DATA PEDIDO':              self._fmt_data_br(df_descartadas_raw, col_data_criacao),
-            'DATA PREVISTA':            self._fmt_data_br(df_descartadas_raw, col_previsao),
+            'DATA PREVISTA':            data_prev_desc,
             'UF':                       self._fmt_col(df_descartadas_raw, col_uf).str.upper(),
             'TRANSPORTADORA':           transp_desc,
             'PEDIDO INTELIPOST':        self._fmt_col(df_descartadas_raw, col_pedido_inte),
