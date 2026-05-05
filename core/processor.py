@@ -358,49 +358,43 @@ class DataProcessor:
             how='left'
         )
 
-        # Aplica o dicionario CARRIERS dos dois lados (canonicaliza nomes longos
-        # do Sysemp como "JADLOG TRANSPORTES SERRA 18" -> "JADLOG"). Assim a
-        # comparacao reflete a transportadora real, e nao o sufixo da empresa.
-        transp_inteli_raw = df_merged[col_transp].astype(str).str.upper().str.strip()
-        transp_sys_raw    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+        # Comparacao em texto bruto (case-insensitive), sem dicionario CARRIERS.
+        # 'encontrado' = Transportadora_sys eh valida (notna E nao vazia E nao 'NAN').
+        transp_inteli_norm = df_merged[col_transp].astype(str).str.upper().str.strip()
+        transp_sys_norm    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
 
-        transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
-        transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
+        # Valores brutos (preservam capitalizacao original) para a saida.
+        transp_inteli_out  = df_merged[col_transp].astype(str).str.strip()
+        transp_sys_out     = df_merged['Transportadora_sys'].astype(str).str.strip()
 
-        # 'encontrado' = NF foi localizada no Sysemp (chave do merge não-NaN).
-        # _NF_SYS_KEY vazio já é filtrado antes do merge, então notna() basta.
-        encontrado = df_merged['_NF_SYS_KEY'].notna()
-        iguais     = encontrado & (transp_inteli == transp_sys)
-        diferentes = encontrado & (transp_inteli != transp_sys)
+        encontrado = (
+            df_merged['Transportadora_sys'].notna()
+            & (transp_sys_norm != '')
+            & (transp_sys_norm != 'NAN')
+        )
+        iguais     = encontrado & (transp_inteli_norm == transp_sys_norm)
+        diferentes = encontrado & (transp_inteli_norm != transp_sys_norm)
 
         # Status final — três estados:
-        #   match com transportadoras iguais (apos dict)     -> 'Verdadeiro'
-        #   match com transportadoras diferentes (apos dict) -> 'Falso'
-        #   sem match no Sysemp                              -> 'Não Localizado'
+        #   match com transportadoras iguais     -> 'Verdadeiro'
+        #   match com transportadoras diferentes -> 'Falso'
+        #   sem match (ou Sysemp invalido)       -> 'Não localizada'
         status = np.where(
-            ~encontrado, "Não Localizado",
+            ~encontrado, "Não localizada",
             np.where(iguais, "Verdadeiro", "Falso")
         )
 
-        # Transportadora final usa o valor canonico (do dicionario):
-        #   diferentes -> Sysemp canonical
-        #   demais     -> Intelipost canonical
-        transp_final = np.where(diferentes, transp_sys, transp_inteli)
+        # Transportadora final: Sysemp raw quando diferentes; Intelipost raw caso contrario.
+        transp_final = np.where(diferentes, transp_sys_out, transp_inteli_out)
 
-        # N° PEDIDO final — PROCV blindado por fillna em cadeia:
-        #   1. Sysemp 'Pedido Marketplace'  (preferencial, vem do merge)
-        #   2. Intelipost 'marketplace'     (fallback)
-        #   3. 'NÃO INFORMADO'              (trava anti-branco)
-        # Strings literais 'nan'/'None'/'<NA>'/'' sao convertidas em pd.NA
-        # antes do fillna para nao serem tratadas como valores validos.
-        _NULOS = ['nan', 'NaN', 'None', '<NA>', '']
-        pedido_sys = (
-            df_merged['Pedido_sys'].astype(str).str.strip().replace(_NULOS, pd.NA)
+        # N° PEDIDO final — vem APENAS do Sysemp 'Pedido Marketplace' (do merge).
+        # Sem fallback para Intelipost.marketplace. Trava anti-branco final
+        # com 'NÃO INFORMADO' caso o Sysemp nao tenha o pedido.
+        serie_pedido_final = (
+            df_merged['Pedido_sys'].astype(str).str.strip()
+            .replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
+            .fillna('NÃO INFORMADO')
         )
-        pedido_int = (
-            df_merged['_PEDIDO_NORM'].astype(str).str.strip().replace(_NULOS, pd.NA)
-        )
-        serie_pedido_final = pedido_sys.fillna(pedido_int).fillna('NÃO INFORMADO')
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
