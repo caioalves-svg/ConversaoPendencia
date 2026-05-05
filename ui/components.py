@@ -2,6 +2,27 @@ import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
+from openpyxl.utils import get_column_letter
+
+# Colunas que devem ser exportadas como TEXTO (preserva zeros à esquerda
+# e impede o Excel de renderizar chaves longas em notação científica).
+COLUNAS_FORCAR_TEXTO = {
+    'Chave NF', 'CHAVE DA NF', 'Chave da NF', 'Chave NFe', 'Chave da Nota',
+}
+
+def _forcar_colunas_texto(worksheet, df, colunas_alvo=COLUNAS_FORCAR_TEXTO):
+    """Aplica number_format='@' (texto) nas células das colunas alvo.
+
+    Necessário porque o Excel, ao abrir, converte strings que parecem números
+    (como chaves de NF de 44 dígitos) em notação científica quando o formato
+    da célula é 'Geral'.
+    """
+    for idx, col_name in enumerate(df.columns, start=1):
+        if col_name in colunas_alvo:
+            letra = get_column_letter(idx)
+            # Linha 1 é cabeçalho; aplica do dado em diante.
+            for cell in worksheet[letra][1:]:
+                cell.number_format = '@'
 
 def render_header(title, subtitle):
     """Renderiza o cabeçalho da página."""
@@ -82,6 +103,8 @@ def render_results_tabs(
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 df_final.to_excel(writer, index=False, sheet_name=sheet_principal)
                 df_removidas.to_excel(writer, index=False, sheet_name=sheet_removidas)
+                _forcar_colunas_texto(writer.sheets[sheet_principal], df_final)
+                _forcar_colunas_texto(writer.sheets[sheet_removidas], df_removidas)
 
             st.download_button(
                 label="📥 BAIXAR PLANILHA COMPLETA (.xlsx)",
