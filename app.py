@@ -145,7 +145,7 @@ def executar_processamento(processor, tipo, file_source, file_sys, file_hist):
             if tipo == "intelipost":
                 (df_f, df_r), err_p = processor.processar_intelipost(df_source_raw, df_sys_clean, nfs_hist)
             elif tipo == "validacao":
-                (df_f, df_r), err_p = processor.processar_validacao_transportadora(df_source_raw, df_sys_clean, nfs_hist, df_sys_raw=df_sys_raw)
+                (df_f, df_r), err_p = processor.processar_validacao_transportadora(df_source_raw, df_sys_clean, nfs_hist)
             else:
                 (df_f, df_r), err_p = processor.processar_email(df_source_raw, df_sys_clean, nfs_hist)
 

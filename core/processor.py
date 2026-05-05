@@ -263,7 +263,7 @@ class DataProcessor:
     # --------------------------------------------------------------------- #
     # NOVO MÓDULO — Validação de Transportadora
     # --------------------------------------------------------------------- #
-    def processar_validacao_transportadora(self, df_inteli, df_sysemp, nfs_historico, df_sys_raw=None):
+    def processar_validacao_transportadora(self, df_inteli, df_sysemp, nfs_historico):
         """
         Motor do fluxo "Validação de Transportadora".
 
@@ -358,35 +358,6 @@ class DataProcessor:
             how='left'
         )
 
-        # Lookup adicional de N° PEDIDO contra o Sysemp BRUTO (sem o filtro
-        # de empresa de tratar_sysemp). Necessario porque pedidos B2B/TIKTOK
-        # direto podem estar em empresas fora do filtro [16,18,19,21] mas a
-        # NF e o Pedido Marketplace existem no arquivo do Sysemp.
-        # Esse lookup só alimenta a coluna N° PEDIDO; status/transportadora
-        # continuam sendo calculados contra o Sysemp filtrado.
-        if df_sys_raw is not None and not df_sys_raw.empty:
-            col_nf_full     = encontrar_coluna(df_sys_raw, ['Nota Fiscal', 'NF', 'Numero NF'])
-            col_pedido_full = encontrar_coluna(df_sys_raw, ['Pedido Marketplace'])
-            if col_nf_full and col_pedido_full:
-                pedido_full_lookup = pd.DataFrame({
-                    '_NF_FULL_KEY': df_sys_raw[col_nf_full].apply(normalizar_nf),
-                    '_PEDIDO_FULL': df_sys_raw[col_pedido_full].apply(self._normalizar_pedido),
-                })
-                pedido_full_lookup = pedido_full_lookup[
-                    (pedido_full_lookup['_NF_FULL_KEY'] != '')
-                    & (pedido_full_lookup['_PEDIDO_FULL'] != '')
-                ]
-                pedido_full_lookup = pedido_full_lookup.drop_duplicates(
-                    subset='_NF_FULL_KEY', keep='first'
-                )
-                df_merged = pd.merge(
-                    df_merged,
-                    pedido_full_lookup,
-                    left_on='_NF_NORM',
-                    right_on='_NF_FULL_KEY',
-                    how='left',
-                )
-
         # Aplica o dicionario CARRIERS dos dois lados (canonicaliza nomes longos
         # do Sysemp como "JADLOG TRANSPORTES SERRA 18" -> "JADLOG"). Assim a
         # comparacao reflete a transportadora real, e nao o sufixo da empresa.
@@ -416,42 +387,20 @@ class DataProcessor:
         #   demais     -> Intelipost canonical
         transp_final = np.where(diferentes, transp_sys, transp_inteli)
 
-        # N° PEDIDO final — VLOOKUP por NF (cruza Intelipost x Sysemp):
-        #
-        # Fonte primaria: Sysemp 'Pedido Marketplace' (lookup feito contra
-        # o Sysemp BRUTO, sem o filtro de empresa, pra cobrir B2B/TIKTOK
-        # direto que ficam fora do filtro [16,18,19,21]).
-        #
-        # Fonte secundaria: Intelipost coluna 'marketplace'.
-        #
-        # Cada nivel so eh consultado se o anterior estiver vazio na linha.
-        if '_PEDIDO_FULL' in df_merged.columns:
-            s_pedido_sys = (
-                df_merged['_PEDIDO_FULL'].astype(str).str.strip()
-                .replace({'nan': '', 'None': '', 'NaT': ''})
-            )
-        else:
-            # Fallback: se o df_sys_raw nao foi passado, usa o Pedido_sys
-            # do Sysemp filtrado (comportamento legado).
-            s_pedido_sys = (
-                df_merged['Pedido_sys'].astype(str).str.strip()
-                .replace({'nan': '', 'None': '', 'NaT': ''})
-            )
-
-        s_pedido_mkt = (
-            df_merged['_PEDIDO_NORM'].astype(str).str.strip()
-            .replace({'nan': '', 'None': '', 'NaT': ''})
+        # N° PEDIDO final — PROCV blindado por fillna em cadeia:
+        #   1. Sysemp 'Pedido Marketplace'  (preferencial, vem do merge)
+        #   2. Intelipost 'marketplace'     (fallback)
+        #   3. 'NÃO INFORMADO'              (trava anti-branco)
+        # Strings literais 'nan'/'None'/'<NA>'/'' sao convertidas em pd.NA
+        # antes do fillna para nao serem tratadas como valores validos.
+        _NULOS = ['nan', 'NaN', 'None', '<NA>', '']
+        pedido_sys = (
+            df_merged['Pedido_sys'].astype(str).str.strip().replace(_NULOS, pd.NA)
         )
-
-        serie_pedido_final = s_pedido_sys.where(s_pedido_sys != '', s_pedido_mkt)
-
-        # Trava anti-branco: se mesmo apos os dois lookups o pedido ficou
-        # vazio (caso raro — ex.: NF que nao esta no Sysemp E o Intelipost
-        # tambem nao tem 'marketplace' preenchido), usa placeholder pra
-        # garantir que o relatorio entregue nunca tenha celula em branco.
-        serie_pedido_final = serie_pedido_final.replace(
-            ['', 'nan', 'NaN', 'None', 'NaT'], 'NÃO INFORMADO'
+        pedido_int = (
+            df_merged['_PEDIDO_NORM'].astype(str).str.strip().replace(_NULOS, pd.NA)
         )
+        serie_pedido_final = pedido_sys.fillna(pedido_int).fillna('NÃO INFORMADO')
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
@@ -508,8 +457,8 @@ class DataProcessor:
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
             'N° PEDIDO':                (
                 df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
-                .replace({'nan': '', 'None': '', 'NaT': ''})
-                .replace('', 'NÃO INFORMADO')
+                .replace(['nan', 'NaN', 'None', '<NA>', ''], pd.NA)
+                .fillna('NÃO INFORMADO')
                 if '_PEDIDO_NORM' in df_descartadas_raw.columns else 'NÃO INFORMADO'
             ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
