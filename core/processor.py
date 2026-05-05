@@ -1,11 +1,16 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from core.config import (
     MARKETPLACES, CARRIERS, OCCURRENCES,
     FINAL_COLUMNS, FINAL_COLUMNS_VALIDACAO
 )
 from utils.helpers import normalizar_nf, encontrar_coluna, carregar_arquivo
+
+# Fuso horario do Brasil. Streamlit Cloud roda em UTC; usar local time
+# levaria "ontem" a ser o dia errado em alguns horarios.
+TZ_BR = ZoneInfo('America/Sao_Paulo')
 
 class DataProcessor:
     def __init__(self):
@@ -555,16 +560,23 @@ class DataProcessor:
         else:
             df_descartadas = pd.DataFrame(columns=FINAL_COLUMNS_VALIDACAO)
 
-        # ----- ETAPA 4 — Filtra DATA PREVISTA = ontem ---------------------- #
-        # Mantem apenas as linhas cuja DATA PREVISTA eh igual a (hoje - 1 dia).
-        # Se a coluna estiver com formato 'DD/MM/YYYY HH:MM:SS' (improvavel
-        # apos _so_data), o split garante que so a parte da data eh comparada.
-        ontem_str = (datetime.now() - timedelta(days=1)).strftime('%d/%m/%Y')
-        df_final = df_final[
-            df_final['DATA PREVISTA'].astype(str).str.split(' ', n=1).str[0] == ontem_str
-        ].copy()
-        df_descartadas = df_descartadas[
-            df_descartadas['DATA PREVISTA'].astype(str).str.split(' ', n=1).str[0] == ontem_str
-        ].copy()
+        # ----- ETAPA 4 — Filtra DATA PREVISTA = ontem (BRT) ---------------- #
+        # Usa timezone do Brasil para calcular "ontem" — evita bug de fuso
+        # quando o servidor roda em UTC. Compara via datetime parseado
+        # (mais robusto que comparacao de string).
+        ontem_dt = (datetime.now(TZ_BR) - timedelta(days=1)).date()
+
+        def _filtra_dia_anterior(df):
+            if df.empty:
+                return df
+            # Parseia DATA PREVISTA tentando dayfirst (formato BR DD/MM/YYYY).
+            datas = pd.to_datetime(
+                df['DATA PREVISTA'], errors='coerce', dayfirst=True, format='mixed'
+            )
+            mask = datas.dt.date == ontem_dt
+            return df[mask].copy()
+
+        df_final       = _filtra_dia_anterior(df_final)
+        df_descartadas = _filtra_dia_anterior(df_descartadas)
 
         return (df_final, df_descartadas), None
