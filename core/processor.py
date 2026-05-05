@@ -273,10 +273,12 @@ class DataProcessor:
                    Lado Intelipost: coluna 'marketplace'.
                    Lado Sysemp:     coluna 'Pedido Marketplace'.
                    Compara transportadora Intelipost x transportadora Sysemp
-                   (texto bruto, case-insensitive — sem dicionário CARRIERS):
-                       match + iguais     -> usa Sysemp,       STATUS = 'Verdadeiro'
-                       match + diferentes -> usa Sysemp,       STATUS = 'Falso'
-                       sem match          -> mantém Intelipost, STATUS = 'Não Localizado'
+                   APÓS canonicalização pelo dicionário CARRIERS — assim
+                   "JADLOG TRANSPORTES SERRA 18" e "JADLOG" são tratados
+                   como a mesma transportadora:
+                       match + iguais (após dict)     -> usa canonical, STATUS = 'Verdadeiro'
+                       match + diferentes (após dict) -> usa Sysemp,    STATUS = 'Falso'
+                       sem match                      -> mantém Intelipost, STATUS = 'Não Localizado'
         ETAPA 3 — Monta planilha final na ordem fixa de FINAL_COLUMNS_VALIDACAO.
                    DATA PEDIDO e DATA PREVISTA são exportadas SEM hora.
                    Detecção de SHOPEE é por substring (canal contém 'SHOPEE').
@@ -351,34 +353,36 @@ class DataProcessor:
             how='left'
         )
 
-        # Comparacao de transportadora em texto bruto (case-insensitive),
-        # sem aplicar o dicionario CARRIERS — espelha a regra do JS.
-        transp_inteli_cmp = df_merged[col_transp].astype(str).str.upper().str.strip()
-        transp_sys_cmp    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
+        # Aplica o dicionario CARRIERS dos dois lados (canonicaliza nomes longos
+        # do Sysemp como "JADLOG TRANSPORTES SERRA 18" -> "JADLOG"). Assim a
+        # comparacao reflete a transportadora real, e nao o sufixo da empresa.
+        transp_inteli_raw = df_merged[col_transp].astype(str).str.upper().str.strip()
+        transp_sys_raw    = df_merged['Transportadora_sys'].astype(str).str.upper().str.strip()
 
-        # Valores brutos (preservando capitalizacao original) para a saida.
-        transp_inteli_out = df_merged[col_transp].astype(str).str.strip()
-        transp_sys_out    = df_merged['Transportadora_sys'].astype(str).str.strip()
+        transp_inteli = transp_inteli_raw.map(self.dict_transp_norm).fillna(transp_inteli_raw)
+        transp_sys    = transp_sys_raw.map(self.dict_transp_norm).fillna(transp_sys_raw)
 
         encontrado = (
             df_merged['Transportadora_sys'].notna()
-            & (transp_sys_cmp != "")
-            & (transp_sys_cmp != "NAN")
+            & (transp_sys_raw != "")
+            & (transp_sys_raw != "NAN")
         )
-        iguais     = encontrado & (transp_inteli_cmp == transp_sys_cmp)
+        iguais     = encontrado & (transp_inteli == transp_sys)
+        diferentes = encontrado & (transp_inteli != transp_sys)
 
         # Status final — três estados:
-        #   match com transportadoras iguais     -> 'Verdadeiro'
-        #   match com transportadoras diferentes -> 'Falso'
-        #   sem match no Sysemp                  -> 'Não Localizado'
+        #   match com transportadoras iguais (apos dict)     -> 'Verdadeiro'
+        #   match com transportadoras diferentes (apos dict) -> 'Falso'
+        #   sem match no Sysemp                              -> 'Não Localizado'
         status = np.where(
             ~encontrado, "Não Localizado",
             np.where(iguais, "Verdadeiro", "Falso")
         )
 
-        # Transportadora final: SEMPRE usa Sysemp quando ha match
-        # (mesmo se igual a Intelipost); sem match mantem Intelipost.
-        transp_final = np.where(encontrado, transp_sys_out, transp_inteli_out)
+        # Transportadora final usa o valor canonico (do dicionario):
+        #   diferentes -> Sysemp canonical
+        #   demais     -> Intelipost canonical
+        transp_final = np.where(diferentes, transp_sys, transp_inteli)
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
         hoje = datetime.now().strftime('%d/%m/%Y')
