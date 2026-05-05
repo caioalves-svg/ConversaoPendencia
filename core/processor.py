@@ -387,33 +387,31 @@ class DataProcessor:
         #   demais     -> Intelipost canonical
         transp_final = np.where(diferentes, transp_sys, transp_inteli)
 
-        # N° PEDIDO final — cadeia de fallback (3 niveis) garante que
-        # nunca venha em branco no relatorio entregue:
-        #
-        #   1. Pedido_sys (Sysemp 'Pedido Marketplace' via VLOOKUP por NF)
-        #      → cobre Shopee (Intelipost vem em branco, Sysemp tem o pedido)
-        #   2. _PEDIDO_NORM (Intelipost coluna 'marketplace')
-        #      → cobre marketplaces tradicionais (ML, MAGALU, etc.)
-        #   3. col_pedido_inte (Intelipost coluna 'Pedido' — AT3787, ESL...)
-        #      → cobre B2B/TIKTOK direto/vendas sem ID de marketplace
-        #
-        # Cada nivel so eh consultado se o anterior estiver vazio para a linha.
-        s_pedido_sys = (
+        # N° PEDIDO final — VLOOKUP por NF (Intelipost x Sysemp):
+        #   1. Limpa Pedido_sys (NaN, "nan", "" -> "" padronizado) para
+        #      a checagem nao se confundir com strings literais 'nan'.
+        #   2. Se Pedido_sys valido -> usa (resolve Shopee, em que o
+        #      Intelipost vem com pedido em branco mas o Sysemp tem o
+        #      'Pedido Marketplace' preenchido).
+        #   3. Senao, cai pro _PEDIDO_NORM da Intelipost.
+        # Por contrato dos dados, o pedido SEMPRE estara em uma das duas
+        # fontes — nao adicionamos placeholder de fallback.
+        pedido_sys_clean = (
             df_merged['Pedido_sys'].astype(str).str.strip()
             .replace({'nan': '', 'None': '', 'NaT': ''})
         )
-        s_pedido_mkt = (
-            df_merged['_PEDIDO_NORM'].astype(str).str.strip()
-            .replace({'nan': '', 'None': '', 'NaT': ''})
-        )
-        s_pedido_inte = self._fmt_col(df_merged, col_pedido_inte)
+        pedido_sys_valido = pedido_sys_clean != ''
 
-        serie_pedido_final = s_pedido_sys.where(
-            s_pedido_sys != '',
-            s_pedido_mkt.where(
-                s_pedido_mkt != '',
-                s_pedido_inte,
-            ),
+        numero_pedido_final = np.where(
+            pedido_sys_valido,
+            pedido_sys_clean,
+            df_merged['_PEDIDO_NORM'].astype(str),
+        )
+
+        serie_pedido_final = (
+            pd.Series(numero_pedido_final, index=df_merged.index).astype(str)
+            .str.strip()
+            .replace({'nan': '', 'None': '', 'NaT': ''})
         )
 
         # ----- ETAPA 3 — Montagem do dataframe final ----------------------- #
@@ -470,15 +468,8 @@ class DataProcessor:
             'CHAVE DA NF':              self._fmt_col(df_descartadas_raw, col_chave_nf),
             'MARKETPLACE':              self._fmt_col(df_descartadas_raw, col_canal).str.upper(),
             'N° PEDIDO':                (
-                # Mesma cadeia de fallback do df_final, sem o nivel Sysemp
-                # (descartadas saem antes do merge com Sysemp).
-                (
-                    df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
-                    .replace({'nan': '', 'None': '', 'NaT': ''})
-                ).where(
-                    lambda s: s != '',
-                    self._fmt_col(df_descartadas_raw, col_pedido_inte),
-                )
+                df_descartadas_raw['_PEDIDO_NORM'].astype(str).str.strip()
+                .replace({'nan': '', 'None': '', 'NaT': ''})
                 if '_PEDIDO_NORM' in df_descartadas_raw.columns else ""
             ),
             'NOTA FISCAL':              df_descartadas_raw['_NF_NORM'].astype(str) if '_NF_NORM' in df_descartadas_raw.columns else "",
