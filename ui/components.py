@@ -45,6 +45,13 @@ def render_instructions(tipo="intelipost"):
             {"icon": "🛡️", "title": "NFs em Tratamento", "desc": "Suba o histórico de NFs em tratamento para descartar duplicidades."},
             {"icon": "✅", "title": "Validação & Export", "desc": "Confronta transportadoras e exporta planilha final auditada."}
         ]
+    elif tipo == "prevencao":
+        steps = [
+            {"icon": "📥", "title": "Extração Intelipost", "desc": "Exporte as transações do portal Intelipost (CSV ou XLSX)."},
+            {"icon": "🖥️", "title": "Base Sysemp", "desc": "Gere o relatório de 'Manutenção de Notas Fiscais' no Sysemp."},
+            {"icon": "🛡️", "title": "NFs em Tratamento", "desc": "Suba o histórico de NFs em tratamento para descartar duplicidades."},
+            {"icon": "📅", "title": "Filtro Hoje + Amanhã", "desc": "Filtra DATA PREVISTA para HOJE e AMANHÃ (prevenção de atrasos)."}
+        ]
     else:
         steps = [
             {"icon": "📧", "title": "Dados de E-mail", "desc": "Prepare a planilha com: Nota Fiscal, Transportadora e Ocorrência."},
