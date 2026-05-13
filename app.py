@@ -33,6 +33,7 @@ def main():
             "📦 Pendência - Intelipost",
             "📧 Pendência - E-mail",
             "⏰ Pendência - Atraso",
+            "🛡️ Pendência - Prevenção",
         ],
         index=0
     )
@@ -99,6 +100,38 @@ def main():
             else:
                 st.warning("⚠️ Selecione os arquivos de origem (Intelipost e Sysemp).")
 
+    elif "Prevenção" in menu:
+        render_header(
+            "Pendência - Prevenção",
+            "Tratativa preventiva — pedidos com DATA PREVISTA de HOJE e AMANHÃ. Mesmas regras de cruzamento Intelipost x Sysemp."
+        )
+        render_instructions("prevencao")
+
+        st.info(
+            "💡 Regras: (1) NFs presentes no histórico são descartadas. "
+            "(2) Pedido Intelipost é cruzado com o Sysemp pela coluna **marketplace**. "
+            "(3) Transportadora é validada — `Verdadeiro` quando coincide, `Falso` quando substituída pelo Sysemp. "
+            "(4) Mantém apenas pedidos com **DATA PREVISTA = HOJE ou AMANHÃ**."
+        )
+
+        with st.container():
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown("### 1. Intelipost")
+                file_source = st.file_uploader("Upload Transações Intelipost", type=["xlsx", "csv"], key="inteli_prev")
+            with c2:
+                st.markdown("### 2. Sysemp")
+                file_sys = st.file_uploader("Upload Manutenção NF", type=["xlsx", "csv"], key="sys_prev")
+            with c3:
+                st.markdown("### 3. NFs em Tratamento")
+                file_hist = st.file_uploader("Histórico / NFs em Tratamento", type=["xlsx", "csv"], key="hist_prev")
+
+        if st.button("🚀 PROCESSAR PREVENÇÃO"):
+            if file_source and file_sys:
+                executar_processamento(processor, "prevencao", file_source, file_sys, file_hist)
+            else:
+                st.warning("⚠️ Selecione os arquivos de origem (Intelipost e Sysemp).")
+
     else:
         render_header("Pendência - E-mail", "Fluxo ágil para tratativas recebidas via comunicação direta.")
         render_instructions("email")
@@ -146,6 +179,8 @@ def executar_processamento(processor, tipo, file_source, file_sys, file_hist):
                 (df_f, df_r), err_p = processor.processar_intelipost(df_source_raw, df_sys_clean, nfs_hist)
             elif tipo == "validacao":
                 (df_f, df_r), err_p = processor.processar_validacao_transportadora(df_source_raw, df_sys_clean, nfs_hist, df_sys_raw=df_sys_raw)
+            elif tipo == "prevencao":
+                (df_f, df_r), err_p = processor.processar_validacao_transportadora(df_source_raw, df_sys_clean, nfs_hist, df_sys_raw=df_sys_raw, modo='prevencao')
             else:
                 (df_f, df_r), err_p = processor.processar_email(df_source_raw, df_sys_clean, nfs_hist)
 
@@ -163,8 +198,8 @@ def executar_processamento(processor, tipo, file_source, file_sys, file_hist):
             with m3: render_metric_card("Novas para Tratar", len(df_f), color="#16a34a")
 
             # Resultados — labels e nome de arquivo customizados por fluxo
-            if tipo == "validacao":
-                # Indicadores específicos do fluxo de validação
+            if tipo in ("validacao", "prevencao"):
+                # Indicadores específicos do fluxo de validação/prevenção
                 if not df_f.empty and 'STATUS DA TRANSPORTADORA' in df_f.columns:
                     st.markdown("<br>", unsafe_allow_html=True)
                     n_verd = int((df_f['STATUS DA TRANSPORTADORA'] == 'Verdadeiro').sum())
@@ -175,16 +210,28 @@ def executar_processamento(processor, tipo, file_source, file_sys, file_hist):
                     with v2: render_metric_card("Falsos (Substituídos)", n_fals, color="#dc2626")
                     with v3: render_metric_card("Não Localizados", n_nloc, color="#f59e0b")
 
-                render_results_tabs(
-                    df_f, df_r,
-                    nome_arquivo="Validacao_Transportadora",
-                    sheet_principal="Validação",
-                    sheet_removidas="Descartadas (Histórico)",
-                    label_principal="✅ Resultado da Validação",
-                    label_removidas="🗑️ Descartadas pelo Histórico",
-                    msg_vazio_principal="Nenhum pedido para validar após o filtro de histórico.",
-                    msg_vazio_removidas="Nenhuma NF foi descartada pelo histórico.",
-                )
+                if tipo == "prevencao":
+                    render_results_tabs(
+                        df_f, df_r,
+                        nome_arquivo="Prevencao_Transportadora",
+                        sheet_principal="Prevenção",
+                        sheet_removidas="Descartadas (Histórico)",
+                        label_principal="🛡️ Resultado da Prevenção",
+                        label_removidas="🗑️ Descartadas pelo Histórico",
+                        msg_vazio_principal="Nenhum pedido com DATA PREVISTA de HOJE ou AMANHÃ.",
+                        msg_vazio_removidas="Nenhuma NF foi descartada pelo histórico.",
+                    )
+                else:
+                    render_results_tabs(
+                        df_f, df_r,
+                        nome_arquivo="Validacao_Transportadora",
+                        sheet_principal="Validação",
+                        sheet_removidas="Descartadas (Histórico)",
+                        label_principal="✅ Resultado da Validação",
+                        label_removidas="🗑️ Descartadas pelo Histórico",
+                        msg_vazio_principal="Nenhum pedido para validar após o filtro de histórico.",
+                        msg_vazio_removidas="Nenhuma NF foi descartada pelo histórico.",
+                    )
             else:
                 render_results_tabs(df_f, df_r)
 
