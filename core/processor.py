@@ -594,4 +594,30 @@ class DataProcessor:
         df_final       = _filtra_data(df_final)
         df_descartadas = _filtra_data(df_descartadas)
 
+        # ----- ETAPA 5 (apenas modo='prevencao') — Ajusta colunas finais --- #
+        # Output da Prevencao:
+        #   - renomeia 'DIA DA TRATATIVA' -> 'DATA TRATATIVA'
+        #   - remove 'DATA PEDIDO' e 'STATUS DA TRANSPORTADORA'
+        if modo == 'prevencao':
+            PREVENCAO_COLS = [
+                'DATA TRATATIVA',
+                'DATA PREVISTA',
+                'UF',
+                'TRANSPORTADORA',
+                'PEDIDO INTELIPOST',
+                'CHAVE DA NF',
+                'MARKETPLACE',
+                'N° PEDIDO',
+                'NOTA FISCAL',
+            ]
+
+            def _to_prevencao(df):
+                if df.empty:
+                    return pd.DataFrame(columns=PREVENCAO_COLS)
+                df = df.rename(columns={'DIA DA TRATATIVA': 'DATA TRATATIVA'})
+                return df[PREVENCAO_COLS]
+
+            df_final       = _to_prevencao(df_final)
+            df_descartadas = _to_prevencao(df_descartadas)
+
         return (df_final, df_descartadas), None
