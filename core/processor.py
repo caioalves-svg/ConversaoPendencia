@@ -275,7 +275,7 @@ class DataProcessor:
     # --------------------------------------------------------------------- #
     # NOVO MÓDULO — Validação de Transportadora
     # --------------------------------------------------------------------- #
-    def processar_validacao_transportadora(self, df_inteli, df_sysemp, nfs_historico, df_sys_raw=None):
+    def processar_validacao_transportadora(self, df_inteli, df_sysemp, nfs_historico, df_sys_raw=None, modo='atraso'):
         """
         Motor do fluxo "Validação de Transportadora".
 
@@ -560,23 +560,38 @@ class DataProcessor:
         else:
             df_descartadas = pd.DataFrame(columns=FINAL_COLUMNS_VALIDACAO)
 
-        # ----- ETAPA 4 — Filtra DATA PREVISTA <= ontem (BRT) --------------- #
-        # Mantem apenas linhas com DATA PREVISTA do dia anterior PRA TRAS
-        # (ontem + todas as anteriores). Hoje e futuras sao excluidas.
+        # ----- ETAPA 4 — Filtra DATA PREVISTA por modo (BRT) --------------- #
+        # modo='atraso' (padrao): mantem apenas linhas com DATA PREVISTA
+        #                          ate ontem (ontem + todas as anteriores).
+        # modo='prevencao'       : mantem apenas linhas com DATA PREVISTA
+        #                          HOJE ou HOJE + 1 DIA (hoje e amanha).
         # Usa timezone do Brasil para evitar bug de fuso em servidor UTC.
         # Linhas com DATA PREVISTA invalida (NaT apos parse) sao descartadas.
-        ontem_dt = (datetime.now(TZ_BR) - timedelta(days=1)).date()
+        if modo == 'prevencao':
+            hoje_dt   = datetime.now(TZ_BR).date()
+            amanha_dt = hoje_dt + timedelta(days=1)
 
-        def _filtra_ate_ontem(df):
-            if df.empty:
-                return df
-            datas = pd.to_datetime(
-                df['DATA PREVISTA'], errors='coerce', dayfirst=True, format='mixed'
-            )
-            mask = datas.dt.date <= ontem_dt
-            return df[mask].copy()
+            def _filtra_data(df):
+                if df.empty:
+                    return df
+                datas = pd.to_datetime(
+                    df['DATA PREVISTA'], errors='coerce', dayfirst=True, format='mixed'
+                )
+                mask = datas.dt.date.isin([hoje_dt, amanha_dt])
+                return df[mask].copy()
+        else:
+            ontem_dt = (datetime.now(TZ_BR) - timedelta(days=1)).date()
 
-        df_final       = _filtra_ate_ontem(df_final)
-        df_descartadas = _filtra_ate_ontem(df_descartadas)
+            def _filtra_data(df):
+                if df.empty:
+                    return df
+                datas = pd.to_datetime(
+                    df['DATA PREVISTA'], errors='coerce', dayfirst=True, format='mixed'
+                )
+                mask = datas.dt.date <= ontem_dt
+                return df[mask].copy()
+
+        df_final       = _filtra_data(df_final)
+        df_descartadas = _filtra_data(df_descartadas)
 
         return (df_final, df_descartadas), None
